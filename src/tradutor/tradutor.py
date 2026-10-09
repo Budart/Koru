@@ -694,7 +694,18 @@ class Overlay(QWidget):
 
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        try:  # icone/agrupamento proprio na barra de tarefas
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Lucas.TradutorDeTela")
+        except Exception:
+            pass
     app = QApplication(sys.argv)
+    try:
+        import os
+        from PySide6.QtGui import QIcon
+        app.setWindowIcon(QIcon(os.path.join(app_dir(), "icone.ico")))
+    except Exception:
+        pass
     w = Overlay(); w.show()
     cfg = load_config()  # ultimos idiomas usados
     for combo, key in ((w.panel.src, "src"), (w.panel.dst, "dst")):
