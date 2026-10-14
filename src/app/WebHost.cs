@@ -177,7 +177,7 @@ static partial class WebHost
                 CoreWebView2Environment.SetLoaderDllFolderPath(BinDir);
                 string data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CentralDeJogos", "WebView2");
                 // sem isso o Chromium "congela" a página enquanto o jogo cobre a janela (timers e imagens param e demoram a voltar)
-                var opts = new CoreWebView2EnvironmentOptions("--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required");
+                var opts = new CoreWebView2EnvironmentOptions("--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --enable-blink-features=AudioVideoTracks");
                 env = await CoreWebView2Environment.CreateAsync(null, data, opts);
                 await view.EnsureCoreWebView2Async(env);
                 view.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;

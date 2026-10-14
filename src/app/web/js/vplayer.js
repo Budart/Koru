@@ -15,6 +15,7 @@ const VP_ICO = {
   next: '<svg viewBox="0 0 24 24"><path d="M5 5v14l10-7zM16 5h3v14h-3z"/></svg>',
   max: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 9h16" stroke="currentColor" stroke-width="2"/></svg>',
   bri: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  aud: '<svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v5a3 3 0 0 0 3 3h1v-7H7v-1a5 5 0 0 1 10 0v1h-2v7h1a3 3 0 0 0 3-3v-5a7 7 0 0 0-7-7z"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
 };
 const vpUrl = (g, k, extra) => `/api/${k}?c=${encodeURIComponent(g.sid || (sysOf(g) || {}).id)}&p=${encodeURIComponent(g.path)}${extra || ''}`;
@@ -30,6 +31,7 @@ function vpEl() {
       <button class="vpb" data-a="back" title="Voltar 10 s (←)">${VP_ICO.back}</button><button class="vpb big" data-a="play" id="vpPlay" title="Play/Pause (Espaço)">${VP_ICO.pause}</button><button class="vpb" data-a="fwd" title="Avançar 10 s (→)">${VP_ICO.fwd}</button><button class="vpb" data-a="next" id="vpNext" title="Próximo vídeo (Ctrl+→)">${VP_ICO.next}</button>
       <div class="vpvol"><button class="vpb" data-a="mute" id="vpMute" title="Mudo (M)">${VP_ICO.vol}</button><input type="range" id="vpVol" min="0" max="1" step="0.02" value="1"></div>
       <span class="vptime" id="vpTime">0:00 / 0:00</span><span class="vpgrow"></span>
+      <div class="vpmenu-w"><button class="vpb wide" data-a="aud" id="vpAud" title="Faixa de áudio (A)">${VP_ICO.aud}<span>Áudio</span></button><div class="vpmenu" id="vpAuds"></div></div>
       <div class="vpmenu-w"><button class="vpb" data-a="sub" title="Legendas (S)">${VP_ICO.sub}</button><div class="vpmenu" id="vpSubs"></div></div>
       <button class="vpb wide" data-a="asp" id="vpAsp" title="Proporção (Ctrl+scroll)">${VP_ICO.asp}<span>Original</span></button>
       <button class="vpb wide" data-a="bri" id="vpBri" title="Brilho (B) — vídeos HDR costumam ficar escuros">${VP_ICO.bri}<span>100%</span></button>
@@ -70,6 +72,15 @@ async function openVPlayer(g) {
   el.classList.add('on'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
+  VP.auds = []; VP.aud = 0; $('vpAud').style.display = 'none';
+  api(vpUrl(g, 'vaudio')).then(l => { if (!VP.open || VP.g !== g) return; VP.auds = l || []; if (!VP.auds.length) return;
+    $('vpAud').style.display = VP.auds.length > 1 || !VP.auds[0].ok ? '' : 'none';
+    const pref = (s.subLang || 'pt').split(',').map(x => x.trim().toLowerCase()), lang = x => ((x.lang || '') + ' ' + x.name).toLowerCase();
+    const okIdx = VP.auds.map((x, i) => i).filter(i => VP.auds[i].ok);
+    let k = -1; for (const p of ['pt', 'por', 'pob']) { if (!pref.includes(p) && p !== 'pt') continue; k = okIdx.find(i => /\b(por|pt|pob)\b|portugu/.test(lang(VP.auds[i]))); if (k != null && k >= 0) break; k = -1; }
+    if (k < 0) k = okIdx.find(i => VP.auds[i].def); if (k == null || k < 0) k = okIdx.length ? okIdx[0] : VP.auds.findIndex(x => x.def);
+    vpSetAud(Math.max(0, k), false);
+  }).catch(() => {});
   // legendas externas (.srt / .vtt com o mesmo nome do vídeo)
   try { VP.subs = await api(vpUrl(g, 'vsubs')); } catch (e) { VP.subs = []; }
   if (!VP.open || VP.g !== g) return;
@@ -157,7 +168,9 @@ async function vpAct(a) {
   if (a === 'play') { if (v.paused) v.play().catch(() => {}); else v.pause(); vpFlash(v.paused ? 'pause' : 'play'); }
   else if (a === 'back') vpSeek(-10); else if (a === 'fwd') vpSeek(10);
   else if (a === 'mute') { v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = .5; }
-  else if (a === 'sub') $('vpSubs').classList.toggle('on');
+  else if (a === 'sub') { $('vpAuds').classList.remove('on'); $('vpSubs').classList.toggle('on'); }
+  else if (a === 'aud') { $('vpSubs').classList.remove('on'); vpAudMenu(); $('vpAuds').classList.toggle('on'); }
+  else if (a === 'audnext') { const n = VP.auds.length; if (n < 2) { vpOsd(n ? 'Só há uma faixa de áudio' : 'Sem informações de áudio'); return; } vpSetAud((VP.aud + 1) % n, true); }
   else if (a === 'subnext') { const n = VP.subs.length; if (!n) { vpOsd('Sem legendas'); return; } let k = VP.sub + 1; while (k < n && VP.subs[k].text === false) k++; if (k >= n) k = -1; vpSetSub(k); vpOsd(k < 0 ? 'Legendas desligadas' : 'Legenda: ' + VP.subs[k].name); }
   else if (a === 'asp') vpAspect(1);
   else if (a === 'bri') { vpBri(1); vpBriSlider(); }
@@ -168,7 +181,7 @@ async function vpAct(a) {
   else if (a === 'hq') {   // player avançado (mpv): formatos que o player rápido não toca
     if (!await mpvReady(true)) return;
     const g = VP.g, t = v.currentTime; vpClose();
-    try { await api('/api/vplayer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid || (sysOf(g) || {}).id, path: g.path, aspect: VP_ASPECTS[VP.aspect][0] }) }); }
+    try { await api('/api/vplayer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid || (sysOf(g) || {}).id, path: g.path, aspect: VP_ASPECTS[VP.aspect][0], aid: String((VP.aud || 0) + 1), start: String(Math.floor(t || 0)) }) }); }
     catch (e) { toast(e.message, true); }
   }
 }
@@ -183,10 +196,10 @@ function vpInput(a) {
     return;
   }
   ({ ok: () => vpAct('play'), back: () => vpClose(), left: () => vpSeek(-10), right: () => vpSeek(10), up: () => vpVolume(.05), down: () => vpVolume(-.05),
-     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next'), lt: () => vpZoom(1 / 1.1), rt: () => vpZoom(1.1) }[a] || (() => {}))();
+     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAct('audnext'), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next'), lt: () => vpZoom(1 / 1.1), rt: () => vpZoom(1.1) }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri',  Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'audnext', A: 'audnext', b: 'bri', B: 'bri',  Escape: 'close', Backspace: 'close' };
   e.preventDefault();
   if (e.ctrlKey && k === 'ArrowRight') return vpAct('next');
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
@@ -280,3 +293,21 @@ function vpBriSlider() {
   w.classList.add('on'); vpBriSlider.keep();
 }
 vpBriSlider.keep = () => { clearTimeout(vpBriSlider.t); vpBriSlider.t = setTimeout(() => { const w = $('vpBriS'); if (w) w.classList.remove('on'); }, 2500); };
+
+// faixas de áudio: troca pela lista do próprio navegador; Dolby/DTS não tocam no player rápido → oferece o player avançado (mpv)
+function vpSetAud(k, show) {
+  const v = $('vpV'), x = VP.auds[k]; if (!x) return; VP.aud = k;
+  const at = v.audioTracks; if (at && at.length) for (let i = 0; i < at.length; i++) at[i].enabled = i === k;
+  $('vpAud').querySelector('span').textContent = (x.lang || x.name).toUpperCase().slice(0, 3);
+  if (!x.ok) {
+    $('vpMsg').innerHTML = `Áudio <b>${esc(x.name)}</b> (${esc(x.codec)}) não toca no player rápido.<br>${VP.auds.some(y => y.ok) ? 'Escolha outra faixa no botão de áudio, ou ' : ''}<button class="btn" id="vpHqA">Abrir no player avançado</button>`;
+    $('vplayer').classList.add('fail'); $('vpHqA').onclick = () => vpAct('hq');
+  } else if ($('vplayer').classList.contains('fail') && $('vpHqA')) { $('vplayer').classList.remove('fail'); $('vpMsg').textContent = ''; }
+  if (show) vpOsd('Áudio: ' + x.name + ' · ' + x.codec + (at && at.length ? '' : ' (troca indisponível)'));
+  vpAudMenu();
+}
+function vpAudMenu() {
+  const m = $('vpAuds'); if (!m) return;
+  m.innerHTML = VP.auds.length ? VP.auds.map((x, i) => `<div class="vpmi${VP.aud === i ? ' on' : ''}${x.ok ? '' : ' dim'}" data-k="${i}">${esc(x.name)} <small>${esc(x.codec)}${x.ok ? '' : ' · só no player avançado'}</small></div>`).join('') : '<div class="vpmi dim">Sem faixas de áudio identificadas</div>';
+  m.querySelectorAll('[data-k]').forEach(el => el.onclick = e => { e.stopPropagation(); m.classList.remove('on'); vpSetAud(+el.dataset.k, true); });
+}

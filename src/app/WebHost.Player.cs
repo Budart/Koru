@@ -244,6 +244,8 @@ input-default-bindings=yes
             "--sub-border-style=" + (bg == "box" ? "background-box" : "outline-and-shadow"), "--sub-back-color=" + (bg == "box" ? "#B0000000" : "#00000000"),
             "--sub-visibility=" + (Opt(c, "subOn", "true") == "False" ? "no" : "yes"),
         };
+        if (Opt(c, "aid", "") != "") a.Add("--aid=" + Opt(c, "aid", ""));
+        if (Opt(c, "start", "") != "") a.Add("--start=" + Opt(c, "start", ""));
         bool full = Opt(c, "videoFull", "false") == "True";
         form.Invoke((Action)(() =>
         {

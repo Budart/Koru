@@ -10,7 +10,7 @@ using System.Windows.Forms;
 // Koru — legendas: embutidas no MKV (texto: SRT/ASS/WebVTT), externas (.srt/.vtt/.ass) e escolhidas à mão; tudo vira WebVTT para o player
 static partial class Central
 {
-    class SubTrack { public int Num; public string Codec = "", Lang = "", Name = "", Priv = ""; public bool Def, Forced; }
+    class SubTrack { public int Num, Type, Channels; public string Codec = "", Lang = "", Name = "", Priv = ""; public bool Def, Forced; }
 
     // ---------- leitura do Matroska (EBML) ----------
     static long VInt(Stream s, bool keepMarker, out int len)
@@ -27,7 +27,8 @@ static partial class Central
     static ulong UInt(Stream s, long n) { ulong v = 0; for (long i = 0; i < n; i++) v = (v << 8) | (uint)s.ReadByte(); return v; }
     static string Str(Stream s, long n) { var b = new byte[n]; s.Read(b, 0, (int)n); return Encoding.UTF8.GetString(b).TrimEnd('\0'); }
 
-    static List<SubTrack> MkvSubTracks(string file, out long tcScale)
+    static List<SubTrack> MkvSubTracks(string file, out long tcScale) { return MkvTracks(file, out tcScale).Where(x => x.Type == 0x11).ToList(); }
+    static List<SubTrack> MkvTracks(string file, out long tcScale)
     {
         var res = new List<SubTrack>(); tcScale = 1000000;
         using (var s = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16))
@@ -53,11 +54,12 @@ static partial class Central
                             if (cid == 0xD7) t.Num = (int)UInt(s, cs); else if (cid == 0x83) type = (int)UInt(s, cs);
                             else if (cid == 0x86) t.Codec = Str(s, cs); else if (cid == 0x22B59C) t.Lang = Str(s, cs); else if (cid == 0x22B59D) t.Lang = Str(s, cs);
                             else if (cid == 0x536E) t.Name = Str(s, cs); else if (cid == 0x63A2) t.Priv = Str(s, cs);
+                            else if (cid == 0xE1) { long aend = s.Position + cs; while (s.Position < aend) { long aid = ElId(s), az = ElSize(s); if (aid == 0x9F) t.Channels = (int)UInt(s, az); else s.Seek(az, SeekOrigin.Current); } }
                             else if (cid == 0x88) t.Def = UInt(s, cs) != 0; else if (cid == 0x55AA) t.Forced = UInt(s, cs) != 0;
                             else s.Seek(cs, SeekOrigin.Current);
                         }
                         s.Position = tend;
-                        if (type == 0x11) res.Add(t);
+                        t.Type = type; if (type == 0x11 || type == 2) res.Add(t);
                     }
                 }
                 else if (id == 0x1F43B675) break;   // chegou nos dados: cabeçalho acabou
@@ -132,7 +134,7 @@ static partial class Central
         { "jpn", "Japonês" }, { "ja", "Japonês" }, { "fre", "Francês" }, { "fra", "Francês" }, { "fr", "Francês" }, { "ger", "Alemão" }, { "deu", "Alemão" }, { "de", "Alemão" }, { "ita", "Italiano" }, { "it", "Italiano" },
         { "kor", "Coreano" }, { "ko", "Coreano" }, { "chi", "Chinês" }, { "zho", "Chinês" }, { "zh", "Chinês" }, { "rus", "Russo" }, { "ru", "Russo" } };
     // ---------- MP4/MOV (legendas tx3g "mov_text" e WebVTT) ----------
-    class Mp4Track { public int Id, Timescale = 1000; public string Handler = "", Codec = "", Lang = "", Name = ""; public byte[] Stts, Stsz, Stsc, Stco; public bool Co64, Def; }
+    class Mp4Track { public int Id, Timescale = 1000, Channels; public string Handler = "", Codec = "", Lang = "", Name = ""; public byte[] Stts, Stsz, Stsc, Stco; public bool Co64, Def; }
     static uint U32(byte[] b, int o) { return (uint)(b[o] << 24 | b[o + 1] << 16 | b[o + 2] << 8 | b[o + 3]); }
     static ulong U64(byte[] b, int o) { return ((ulong)U32(b, o) << 32) | U32(b, o + 4); }
     static byte[] ReadMoov(string file)
@@ -164,7 +166,8 @@ static partial class Central
         }
     }
     static Tuple<string, int, int> Box(byte[] b, int start, int end, string type) { return Boxes(b, start, end).FirstOrDefault(x => x.Item1 == type); }
-    static List<Mp4Track> Mp4SubTracks(string file)
+    static List<Mp4Track> Mp4SubTracks(string file) { return Mp4Tracks(file).Where(x => x.Handler != "soun").ToList(); }
+    static List<Mp4Track> Mp4Tracks(string file)
     {
         var res = new List<Mp4Track>(); var m = ReadMoov(file); if (m == null) return res;
         foreach (var trak in Boxes(m, 0, m.Length).Where(x => x.Item1 == "trak"))
@@ -181,9 +184,10 @@ static partial class Central
             }
             var elng = Box(m, mdia.Item2, mdia.Item3, "elng"); if (elng != null) t.Lang = Encoding.ASCII.GetString(m, elng.Item2 + 4, elng.Item3 - elng.Item2 - 4).TrimEnd('\0');
             if (hdlr != null) { t.Handler = Encoding.ASCII.GetString(m, hdlr.Item2 + 8, 4); if (hdlr.Item3 > hdlr.Item2 + 24) t.Name = Encoding.UTF8.GetString(m, hdlr.Item2 + 24, hdlr.Item3 - hdlr.Item2 - 24).Trim('\0', ' '); }
-            if (!(t.Handler == "sbtl" || t.Handler == "text" || t.Handler == "subt") || minf == null) continue;
+            if (!(t.Handler == "sbtl" || t.Handler == "text" || t.Handler == "subt" || t.Handler == "soun") || minf == null) continue;
             var stbl = Box(m, minf.Item2, minf.Item3, "stbl"); if (stbl == null) continue;
             var stsd = Box(m, stbl.Item2, stbl.Item3, "stsd"); if (stsd != null && stsd.Item3 - stsd.Item2 >= 16) t.Codec = Encoding.ASCII.GetString(m, stsd.Item2 + 12, 4);
+            if (t.Handler == "soun" && stsd != null && stsd.Item3 - stsd.Item2 >= 34) t.Channels = (m[stsd.Item2 + 32] << 8) | m[stsd.Item2 + 33];
             Func<string, byte[]> raw = n => { var x = Box(m, stbl.Item2, stbl.Item3, n); if (x == null) return null; var r = new byte[x.Item3 - x.Item2]; Buffer.BlockCopy(m, x.Item2, r, 0, r.Length); return r; };
             t.Stts = raw("stts"); t.Stsz = raw("stsz"); t.Stsc = raw("stsc"); t.Stco = raw("stco"); if (t.Stco == null) { t.Stco = raw("co64"); t.Co64 = true; }
             var udta = Box(m, trak.Item2, trak.Item3, "udta"); if (udta != null) { var nm = Box(m, udta.Item2, udta.Item3, "name"); if (nm != null) t.Name = Encoding.UTF8.GetString(m, nm.Item2, nm.Item3 - nm.Item2).Trim('\0', ' '); }
@@ -228,6 +232,35 @@ static partial class Central
     static string EmbeddedSubToVtt(string vf, int id) { return IsMp4(vf) ? Mp4SubToVtt(vf, id) : MkvSubToVtt(vf, id); }
     static bool IsMp4(string vf) { return Regex.IsMatch(Path.GetExtension(vf), @"^\.(mp4|m4v|mov|3gp)$", RegexOptions.IgnoreCase); }
 
+    // ---------- faixas de áudio (para escolher no player) ----------
+    static readonly Regex AudioOk = new Regex(@"^(mp4a|opus|Opus|fLaC|alac|\.mp3|A_AAC|A_OPUS|A_VORBIS|A_FLAC|A_MPEG|A_PCM)", RegexOptions.IgnoreCase);
+    static string AudioCodecName(string c)
+    {
+        c = c ?? ""; if (Regex.IsMatch(c, "ec-3|EAC3", RegexOptions.IgnoreCase)) return "Dolby Digital Plus"; if (Regex.IsMatch(c, "ac-3|A_AC3", RegexOptions.IgnoreCase)) return "Dolby Digital";
+        if (Regex.IsMatch(c, "TRUEHD|mlpa", RegexOptions.IgnoreCase)) return "Dolby TrueHD"; if (Regex.IsMatch(c, "DTS|dts", RegexOptions.IgnoreCase)) return "DTS";
+        if (Regex.IsMatch(c, "mp4a|AAC", RegexOptions.IgnoreCase)) return "AAC"; if (Regex.IsMatch(c, "opus", RegexOptions.IgnoreCase)) return "Opus"; if (Regex.IsMatch(c, "flac", RegexOptions.IgnoreCase)) return "FLAC";
+        if (Regex.IsMatch(c, "VORBIS", RegexOptions.IgnoreCase)) return "Vorbis"; if (Regex.IsMatch(c, "MPEG|mp3", RegexOptions.IgnoreCase)) return "MP3"; return c;
+    }
+    static List<object> AudioTracks(string vf)
+    {
+        var list = new List<object>();
+        try
+        {
+            IEnumerable<Tuple<string, string, string, int, bool>> raw = null;   // idioma, nome, codec, canais, padrão
+            if (IsMp4(vf)) raw = Mp4Tracks(vf).Where(x => x.Handler == "soun").Select(x => Tuple.Create(x.Lang, x.Name, x.Codec, x.Channels, x.Def)).ToList();
+            else if (Regex.IsMatch(Path.GetExtension(vf), @"^\.(mkv|webm|mka)$", RegexOptions.IgnoreCase)) { long sc; raw = MkvTracks(vf, out sc).Where(x => x.Type == 2).Select(x => Tuple.Create(x.Lang, x.Name, x.Codec, x.Channels, x.Def)).ToList(); }
+            if (raw == null) return list;
+            foreach (var t in raw)
+            {
+                string ln; LangNames.TryGetValue((t.Item1 ?? "").ToLowerInvariant(), out ln);
+                string ch = t.Item4 >= 8 ? " 7.1" : t.Item4 >= 6 ? " 5.1" : t.Item4 == 2 ? " estéreo" : t.Item4 == 1 ? " mono" : "";
+                string name = (ln ?? (t.Item1 == "" || t.Item1 == "und" ? "Áudio" : t.Item1)) + (t.Item2 != "" && t.Item2 != ln ? " — " + t.Item2 : "");
+                list.Add(new Dictionary<string, object> { { "name", name }, { "lang", t.Item1 ?? "" }, { "codec", AudioCodecName(t.Item3) + ch }, { "ok", AudioOk.IsMatch(t.Item3 ?? "") }, { "def", t.Item5 } });
+            }
+        }
+        catch { }
+        return list;
+    }
     static List<object> EmbeddedSubs(string vf)
     {
         var list = new List<object>();

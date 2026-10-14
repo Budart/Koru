@@ -280,6 +280,11 @@ static partial class Central
                 if (vf != null) list.AddRange(EmbeddedSubs(vf));   // legendas dentro do próprio arquivo (MKV)
                 SendJson(ctx, list);
             }
+            else if (path == "/api/vaudio")
+            {
+                string vf = WebHost.VideoFileOf(req.QueryString["c"], req.QueryString["p"]);
+                SendJson(ctx, vf == null ? new List<object>() : AudioTracks(vf));
+            }
             else if (path == "/api/vsubpick" && req.HttpMethod == "POST")
             {
                 string bodyText; using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) bodyText = sr.ReadToEnd();
@@ -317,7 +322,7 @@ static partial class Central
                 var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == S(body, "console"));
                 string vf = WebHost.VideoFileOf(S(body, "console"), S(body, "path"));
                 if (c == null || vf == null) { SendJson(ctx, Err("Vídeo inválido"), 400); return; }
-                var c2 = new Dictionary<string, object>(c); if (S(body, "upscale") != "") c2["upscale"] = S(body, "upscale"); if (S(body, "aspect") != "") c2["aspect"] = S(body, "aspect");
+                var c2 = new Dictionary<string, object>(c); if (S(body, "aid") != "") c2["aid"] = S(body, "aid"); if (S(body, "start") != "") c2["start"] = S(body, "start"); if (S(body, "upscale") != "") c2["upscale"] = S(body, "upscale"); if (S(body, "aspect") != "") c2["aspect"] = S(body, "aspect");
                 string er = WebHost.Play(vf, c2);
                 SendJson(ctx, er == null ? new Dictionary<string, object> { { "ok", true } } : Err(er), er == null ? 200 : 400);
             }
