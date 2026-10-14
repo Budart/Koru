@@ -89,6 +89,7 @@ static partial class Central
             ContextMenuStrip = menu,
             Visible = true
         };
+        tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) try { WebHost.ToggleMini(); } catch (Exception ex) { CrashLog("mini", ex); } };   // um clique: mini busca
         tray.DoubleClick += (s, e) => OpenBrowser();
         var ui = new Control(); var h = ui.Handle;   // para voltar à thread da interface
         new Thread(() => { while (true) { showEvt.WaitOne(); try { ui.BeginInvoke((Action)(() => OpenBrowser())); } catch { } } }) { IsBackground = true }.Start();

@@ -16,7 +16,7 @@ function setGameOn(on) {
   gameOn = on;
   if (on) { try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
 }
-if (host) host.addEventListener('message', e => { if (e.data === 'game:on') setGameOn(true); else if (e.data === 'game:off') { setGameOn(false); setTimeout(refreshScreen, 250); } });
+if (host) host.addEventListener('message', e => { if (typeof e.data === 'string' && e.data.startsWith('play:')) { try { const o = JSON.parse(e.data.slice(5)), l = [].concat(typeof allGames !== 'undefined' && allGames || [], typeof games !== 'undefined' && games || [], (typeof gameCache !== 'undefined' && gameCache[o.sid]) || []); openVPlayer(l.find(x => (x.sid || o.sid) === o.sid && x.path === o.path) || o); } catch (er) {} return; } if (e.data === 'game:on') setGameOn(true); else if (e.data === 'game:off') { setGameOn(false); setTimeout(refreshScreen, 250); } });
 // voltou do jogo: redesenha a tela atual para recarregar capas, cards e fundos
 function refreshScreen() {
   try {

@@ -80,7 +80,8 @@ static partial class Central
             var cfg = LoadConfig();
             string root = Root(cfg);
 
-            if (path == "/" || path == "/index.html" || path == "/config" || path == "/welcome")
+            if (path == "/mini") Send(ctx, 200, "text/html; charset=utf-8", Utf8.GetBytes(Resource("web/mini.html")));
+            else if (path == "/" || path == "/index.html" || path == "/config" || path == "/welcome")
                 Send(ctx, 200, "text/html; charset=utf-8", Utf8.GetBytes(Resource("web/index.html")));
             else if (path.StartsWith("/img/") && !path.Contains(".."))
             {

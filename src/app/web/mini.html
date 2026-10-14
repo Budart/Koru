@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Koru — busca</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<style>
+  :root { --bg:#14161c; --surf:#1d2028; --line:rgba(255,255,255,.08); --text:#f1ece3; --muted:#a39d93; --acc:#3D7BFF; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.35 "Poppins","Segoe UI",sans-serif; overflow:hidden; user-select:none; }
+  .wrap { display:flex; height:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .left { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .top { display:flex; align-items:center; gap:10px; padding:14px 14px 10px; }
+  .top svg { width:22px; height:22px; flex:none; }
+  #q { flex:1; min-width:0; background:var(--surf); border:1px solid var(--line); border-radius:10px; color:var(--text); padding:10px 12px; font:inherit; font-size:15px; outline:none; }
+  #q:focus { border-color:var(--acc); }
+  #list { flex:1; overflow:auto; padding:2px 8px 8px; }
+  #list::-webkit-scrollbar { width:8px; } #list::-webkit-scrollbar-thumb { background:#2c3038; border-radius:4px; }
+  .it { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px; cursor:pointer; }
+  .it:hover { background:rgba(255,255,255,.05); } .it.on { background:linear-gradient(90deg,#2F6BFF,#1F4FD6); }
+  .it .n { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .it .s { font-size:11px; color:var(--muted); white-space:nowrap; } .it.on .s { color:#dfe7ff; }
+  .it .k { width:20px; text-align:center; font-size:13px; opacity:.8; }
+  .hd { padding:8px 10px 4px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .empty { padding:24px 12px; color:var(--muted); text-align:center; }
+  .right { width:250px; flex:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; background:#101217; border-left:1px solid var(--line); }
+  #cov { width:100%; height:250px; display:flex; align-items:center; justify-content:center; }
+  #cov img { max-width:100%; max-height:100%; border-radius:6px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #cov .gen { width:150px; height:210px; border-radius:6px; display:flex; align-items:flex-end; padding:12px; font-weight:700; line-height:1.15; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #ttl { font-weight:600; text-align:center; max-height:3.9em; overflow:hidden; } #sub { font-size:12px; color:var(--muted); text-align:center; }
+  .foot { display:flex; gap:14px; padding:8px 14px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
+  .foot b { color:var(--text); background:#2c3038; border-radius:5px; padding:1px 6px; font-weight:600; margin-right:4px; }
+  #msg { position:fixed; left:50%; bottom:46px; transform:translateX(-50%); background:#2c3038; padding:8px 14px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; } #msg.on { opacity:1; } #msg.err { background:#7f1d1d; }
+</style></head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <div class="top"><svg viewBox="0 0 100 100"><path d="M50 10a40 40 0 1 1-40 40a28 28 0 0 1 28-28a18 18 0 0 1 18 18a9 9 0 0 1-9 9" fill="none" stroke="#3D7BFF" stroke-width="11" stroke-linecap="round"/></svg><input id="q" placeholder="Buscar jogos e vídeos..." autocomplete="off" spellcheck="false"></div>
+    <div id="list"><div class="empty">Carregando...</div></div>
+    <div class="foot"><span><b>↑↓</b>escolher</span><span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span><span style="margin-left:auto;cursor:pointer" id="openMain">Abrir o Koru ↗</span></div>
+  </div>
+  <div class="right"><div id="cov"></div><div id="ttl"></div><div id="sub"></div></div>
+</div>
+<div id="msg"></div>
+<script>
+const $ = id => document.getElementById(id), host = window.chrome && chrome.webview;
+const post = m => host && host.postMessage(m);
+const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-]+/g, ' ');
+const api = async u => { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); };
+let items = [], shown = [], sel = 0, loadedAt = 0, covers = {}, art = {}, sysById = {};
+const key = g => g.sid + '|' + g.path;
+const nameOf = g => covers['name|' + key(g)] || g.name;
+async function load() {
+  try {
+    const [cs, cv, hid, ac] = await Promise.all([api('/api/consoles'), api('/api/covers').catch(() => ({})), api('/api/hidden').catch(() => []), api('/api/artcache').catch(() => ({}))]);
+    covers = cv || {}; art = ac || {}; const hs = new Set(hid || []);
+    const on = cs.filter(c => c.enabled !== false); sysById = {}; on.forEach(c => sysById[c.id] = c);
+    const lists = await Promise.all(on.map(c => api('/api/games?c=' + encodeURIComponent(c.id)).then(l => l.map(g => ({ ...g, sid: c.id }))).catch(() => [])));
+    items = [].concat(...lists).filter(g => !g.priv && !hs.has(key(g)));
+    items.forEach(g => g._n = norm(nameOf(g)));
+    loadedAt = Date.now();
+  } catch (e) { items = []; }
+  search();
+}
+function search() {
+  const q = norm($('q').value).trim(), ws = q.split(/\s+/).filter(Boolean);
+  if (!ws.length) shown = items.filter(g => covers['fav|' + key(g)] === '1').sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  else shown = items.filter(g => ws.every(w => g._n.includes(w))).sort((a, b) => (b._n.startsWith(q) - a._n.startsWith(q)) || nameOf(a).localeCompare(nameOf(b))).slice(0, 80);
+  sel = 0; render();
+}
+function render() {
+  const L = $('list'), q = $('q').value.trim();
+  if (!shown.length) { L.innerHTML = `<div class="empty">${q ? 'Nada encontrado.' : items.length ? 'Digite para buscar. Os favoritos aparecem aqui.' : 'Carregando...'}</div>`; preview(null); return; }
+  L.innerHTML = (q ? '' : '<div class="hd">⭐ Favoritos</div>') + shown.map((g, i) => { const s = sysById[g.sid] || {}; return `<div class="it${i === sel ? ' on' : ''}" data-i="${i}"><span class="k">${s.type === 'video' ? '🎬' : s.type === 'pc' ? '🖥' : '🎮'}</span><span class="n">${esc(nameOf(g))}</span><span class="s">${esc(s.name || '')}</span></div>`; }).join('');
+  L.querySelectorAll('.it').forEach(el => { el.onclick = () => { sel = +el.dataset.i; mark(); }; el.ondblclick = () => { sel = +el.dataset.i; openSel(); }; });
+  preview(shown[sel]);
+}
+function mark() { $('list').querySelectorAll('.it').forEach((el, i) => el.classList.toggle('on', i === sel)); const el = $('list').querySelector('.it.on'); if (el) el.scrollIntoView({ block: 'nearest' }); preview(shown[sel]); }
+function coverUrl(g) {
+  const k = key(g), s = sysById[g.sid] || {}, u = covers[k] || (art[k] && art[k].box) || (s.type === 'video' ? `/api/vthumb?c=${encodeURIComponent(g.sid)}&p=${encodeURIComponent(g.path)}` : '');
+  return /^https?:/.test(u) ? '/api/img?u=' + encodeURIComponent(u) : u;
+}
+let pvTok = 0;
+function preview(g) {
+  const tok = ++pvTok;
+  if (!g) { $('cov').innerHTML = ''; $('ttl').textContent = ''; $('sub').textContent = ''; return; }
+  const s = sysById[g.sid] || {}; $('ttl').textContent = nameOf(g); $('sub').textContent = s.name || '';
+  let h = 0; for (const c of nameOf(g)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const gen = `<div class="gen" style="background:linear-gradient(155deg,hsl(${h % 360},55%,30%),hsl(${(h >> 8) % 360},45%,12%))">${esc(nameOf(g))}</div>`;
+  const u = coverUrl(g); $('cov').innerHTML = gen;
+  if (u) { const im = new Image(); im.onload = () => { if (tok === pvTok) { $('cov').innerHTML = ''; $('cov').appendChild(im); } }; im.src = u; }
+}
+let busy = false;
+async function openSel() {
+  const g = shown[sel]; if (!g || busy) return; const s = sysById[g.sid] || {};
+  if (s.type === 'video') { post('play:' + JSON.stringify({ sid: g.sid, path: g.path, name: g.name })); return; }
+  if (!s.emulatorOk) { post('open'); return; }
+  busy = true; toast('▶ Abrindo ' + nameOf(g) + '…');
+  try { const r = await fetch('/api/launch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid, path: g.path }) }); const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || 'erro'); setTimeout(() => post('hide'), 600); }
+  catch (e) { toast(e.message, true); }
+  busy = false;
+}
+function toast(t, err) { const m = $('msg'); m.textContent = t; m.className = 'on' + (err ? ' err' : ''); clearTimeout(toast.t); toast.t = setTimeout(() => m.className = '', 2200); }
+function move(d) { if (!shown.length) return; sel = (sel + d + shown.length) % shown.length; mark(); }
+$('q').oninput = search;
+$('openMain').onclick = () => post('open');
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); move(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+  else if (e.key === 'PageDown') { e.preventDefault(); move(8); } else if (e.key === 'PageUp') { e.preventDefault(); move(-8); }
+  else if (e.key === 'Enter') { e.preventDefault(); openSel(); } else if (e.key === 'Escape') { e.preventDefault(); post('hide'); }
+  else if (document.activeElement !== $('q') && e.key.length === 1) $('q').focus();
+});
+// controle: D-pad escolhe, A abre, B fecha
+let padPrev = {};
+(function poll() { const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(Boolean);
+  if (p && document.hasFocus()) { const b = i => !!(p.buttons[i] && p.buttons[i].pressed), st = { u: b(12) || p.axes[1] < -.6, d: b(13) || p.axes[1] > .6, a: b(0), x: b(1) };
+    if (st.u && !padPrev.u) move(-1); if (st.d && !padPrev.d) move(1); if (st.a && !padPrev.a) openSel(); if (st.x && !padPrev.x) post('hide'); padPrev = st; }
+  requestAnimationFrame(poll); })();
+window.miniShown = () => { $('q').focus(); $('q').select(); if (Date.now() - loadedAt > 120000) load(); };
+load(); $('q').focus();
+</script>
+</body></html>
