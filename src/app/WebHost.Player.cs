@@ -195,6 +195,7 @@ input-default-bindings=yes
 
     // ---------- arquivo de vídeo para o player/prévia da página (com "Range": só lê o pedaço pedido, sem carregar o arquivo) ----------
     public static Func<string, string, string> VideoFileOf;
+    const long ChunkMax = 4L << 20;
     static readonly List<RangeStream> OpenVids = new List<RangeStream>();
     public static readonly List<Process> ThumbProcs = new List<Process>();
     static string mpvFile;
@@ -239,9 +240,12 @@ input-default-bindings=yes
                         if (m.Groups[1].Value != "") { a = long.Parse(m.Groups[1].Value); if (m.Groups[2].Value != "") b = Math.Min(len - 1, long.Parse(m.Groups[2].Value)); }
                         else if (m.Groups[2].Value != "") { a = Math.Max(0, len - long.Parse(m.Groups[2].Value)); }
                     }
+                    // o WebView2 copia a resposta inteira para a memória: entrega no máximo 4 MB por pedido (o player pede o resto aos poucos)
+                    if (b - a + 1 > ChunkMax) b = a + ChunkMax - 1;
+                    bool part = !(a == 0 && b == len - 1);
                     string ext = Path.GetExtension(f).ToLowerInvariant();
                     string type = ext == ".webm" || ext == ".mkv" ? "video/webm" : ext == ".ogv" ? "video/ogg" : "video/mp4";
-                    body = new RangeStream(fs, a, b - a + 1, f); code = m != null && m.Success ? 206 : 200;
+                    body = new RangeStream(fs, a, b - a + 1, f); code = part ? 206 : 200;
                     hdr = "Content-Type: " + type + "\r\nAccept-Ranges: bytes\r\nContent-Length: " + (b - a + 1) + (code == 206 ? "\r\nContent-Range: bytes " + a + "-" + b + "/" + len : "") + "\r\nCache-Control: no-store";
                 }
             }
