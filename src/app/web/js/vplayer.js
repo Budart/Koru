@@ -53,7 +53,9 @@ function vpEl() {
   sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { VPV().currentTime = t; vpPaint(); } };
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
-  el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
+  el.querySelector('.vpframe').addEventListener('contextmenu', e => { if (e.target.closest('.vpbar, .vptop')) return; e.preventDefault(); vpCtx(e.clientX, e.clientY); });
+  document.addEventListener('mousedown', e => { if (!VP.open) return; document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => { if (!m.contains(e.target) && !(m.parentNode && m.parentNode.contains(e.target) && m.id !== 'vpCtx')) m.classList.remove('on'); }); }, true);
+  el.addEventListener('wheel', e => { if (e.target.closest('.vpmenu, #vpCtx')) return; e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
   window.addEventListener('resize', () => { if (VP.open) { vpLayout(); vpMpvRect(); } });
   return el;
 }
@@ -154,10 +156,11 @@ function vpCues() {
 }
 function vpSubMenu() {
   const m = $('vpSubs'); if (!m) return;
-  const tag = x => x.path ? ' <small>arquivo escolhido</small>' : x.emb != null ? (x.text === false ? ' <small>no vídeo · imagem, não suportada</small>' : ' <small>no vídeo</small>') : ' <small>' + esc(x.file.split('.').pop()) + '</small>';
-  m.innerHTML = `<div class="vpmi${VP.sub < 0 ? ' on' : ''}" data-k="-1">Desligadas</div>` + VP.subs.map((x, i) => `<div class="vpmi${VP.sub === i ? ' on' : ''}${x.text === false ? ' dim' : ''}" data-k="${i}">${esc(x.name)}${tag(x)}</div>`).join('') + `<div class="vpmi pick" data-k="pick">📂 Escolher arquivo de legenda…</div>`;
+  const tag = x => x.path ? 'Arquivo escolhido' : x.emb != null ? (x.text === false ? 'No vídeo · imagem, não suportada' : 'No vídeo') : 'Arquivo ' + esc(x.file.split('.').pop().toUpperCase()) + ' ao lado do vídeo';
+  m.innerHTML = '<div class="vpmh">Legendas</div>' + vpMi(-1, VP.sub < 0, 'Desligadas', '') + VP.subs.map((x, i) => vpMi(i, VP.sub === i, esc(x.name), tag(x), x.text === false)).join('') + '<div class="vpmi vpick" data-k="pick"><i class="ck">＋</i><span class="t"><b>Escolher arquivo de legenda…</b><small>.srt, .vtt ou .ass do seu PC</small></span></div>';
   m.querySelectorAll('[data-k]').forEach(x => x.onclick = e => { e.stopPropagation(); m.classList.remove('on'); if (x.dataset.k === 'pick') vpPickSub(); else vpSetSub(+x.dataset.k); });
 }
+const vpMi = (k, on, name, sub, dim) => `<div class="vpmi${on ? ' on' : ''}${dim ? ' dim' : ''}" data-k="${k}"><i class="ck">${on ? '✓' : ''}</i><span class="t"><b>${name}</b>${sub ? `<small>${sub}</small>` : ''}</span></div>`;
 function vpSubStyle(s) {
   let st = $('vpCue'); if (!st) { st = document.createElement('style'); st.id = 'vpCue'; document.head.appendChild(st); }
   const col = s.subColor === 'yellow' ? '#FFE14D' : s.subColor === 'cyan' ? '#7FE7FF' : '#fff', sz = (+s.subSize || 46) / 46 * 2.6, bg = s.subBg || 'outline';
@@ -316,7 +319,7 @@ function vpSetAud(k, show) {
 }
 function vpAudMenu() {
   const m = $('vpAuds'); if (!m) return;
-  m.innerHTML = VP.auds.length ? VP.auds.map((x, i) => `<div class="vpmi${VP.aud === i ? ' on' : ''}${x.ok ? '' : ' dim'}" data-k="${i}">${esc(x.name)} <small>${esc(x.codec)}${x.ok ? '' : ' · só no player avançado'}</small></div>`).join('') : '<div class="vpmi dim">Sem faixas de áudio identificadas</div>';
+  m.innerHTML = '<div class="vpmh">Áudio</div>' + (VP.auds.length ? VP.auds.map((x, i) => vpMi(i, VP.aud === i, esc(x.name), esc(x.codec))).join('') : '<div class="vpmi dim"><i class="ck"></i><span class="t"><b>Sem faixas identificadas</b></span></div>');
   m.querySelectorAll('[data-k]').forEach(el => el.onclick = e => { e.stopPropagation(); m.classList.remove('on'); vpSetAud(+el.dataset.k, true); });
 }
 
@@ -372,3 +375,25 @@ async function vpTxStart(k) {
 // o vídeo é sempre o do player da página; o som que ele não toca vem do mpv (ver vpTxStart)
 const VPV = () => $('vpV'); const VPM = null;
 function vpMpvStop() {} function vpMpvRect() {}
+
+// menu do botão direito no vídeo: proporção, áudio, legenda e abrir no Explorador
+function vpCtx(x, y) {
+  document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => m.classList.remove('on'));
+  let c = $('vpCtx'); if (!c) { c = document.createElement('div'); c.id = 'vpCtx'; c.className = 'vpmenu'; $('vplayer').appendChild(c); }
+  const sec = (t, html) => `<div class="vpmh">${t}</div>${html}`;
+  c.innerHTML =
+    sec('Proporção', VP_ASPECTS.map((a, i) => vpMi('a' + i, VP.aspect === i, a[1], '')).join('')) +
+    (VP.auds.length ? sec('Áudio', VP.auds.map((a, i) => vpMi('u' + i, VP.aud === i, esc(a.name), esc(a.codec))).join('')) : '') +
+    sec('Legenda', vpMi('s-1', VP.sub < 0, 'Desligadas', '') + VP.subs.map((t, i) => vpMi('s' + i, VP.sub === i, esc(t.name), t.emb != null ? 'No vídeo' : t.path ? 'Arquivo escolhido' : 'Arquivo ao lado', t.text === false)).join('') + '<div class="vpmi vpick" data-k="pick"><i class="ck">＋</i><span class="t"><b>Escolher arquivo de legenda…</b></span></div>') +
+    '<div class="vpsep"></div><div class="vpmi" data-k="reveal"><i class="ck">📂</i><span class="t"><b>Abrir no Explorador de Arquivos</b></span></div>';
+  c.querySelectorAll('[data-k]').forEach(it => it.onclick = ev => {
+    ev.stopPropagation(); c.classList.remove('on'); const k = it.dataset.k;
+    if (k === 'pick') vpPickSub();
+    else if (k === 'reveal') { const g = VP.g; if (document.body.classList.contains('vpfull')) vpAct('full'); api('/api/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: g.path }) }).catch(er => toast(er.message, true)); }
+    else if (k[0] === 'a') { VP.aspect = +k.slice(1); vpAspect(0); vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
+    else if (k[0] === 'u') vpSetAud(+k.slice(1), true);
+    else if (k[0] === 's') vpSetSub(+k.slice(1));
+  });
+  c.classList.add('on');
+  const r = c.getBoundingClientRect(); c.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px'; c.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+}

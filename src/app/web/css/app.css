@@ -865,6 +865,19 @@ body.vprevon #vidBox { opacity:0 !important; pointer-events:none; }
 #vplayer .vpb.on { color:#3D7BFF; }
 #vpCues { position:absolute; left:6%; right:6%; text-align:center; z-index:3; pointer-events:none; line-height:1.3; } #vpCues span { display:inline-block; padding:.05em .3em; border-radius:4px; }
 #vpFlash { position:absolute; left:50%; top:50%; width:96px; height:96px; margin:-48px 0 0 -48px; border-radius:50%; background:rgba(10,12,18,.55); display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; opacity:0; } #vpFlash svg { width:52px; height:52px; fill:#f1ece3; } #vpFlash.go { animation:vpFlash .5s ease-out forwards; } @keyframes vpFlash { 0% { opacity:1; transform:scale(.85); } 30% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.25); } }
-#vplayer .vpmi small { opacity:.55; font-size:11px; margin-left:6px; } #vplayer .vpmi.pick { border-top:1px solid rgba(255,255,255,.08); margin-top:4px; padding-top:10px; color:#9fbaff; } #vplayer .vpmenu { max-height:60vh; overflow:auto; }
-#vplayer .vpbar, #vplayer .vptop { z-index:5; } #vplayer .vpmi.pick { border:0; border-top:1px solid rgba(255,255,255,.08); border-radius:0 0 8px 8px; }
+#vplayer .vpmi small { opacity:.55; font-size:11px; margin-left:6px; } #vplayer .vpmi.vpick { border-top:1px solid rgba(255,255,255,.08); margin-top:4px; padding-top:10px; color:#9fbaff; } #vplayer .vpmenu { max-height:60vh; overflow:auto; }
+#vplayer .vpbar, #vplayer .vptop { z-index:5; } #vplayer .vpmi.vpick { border:0; border-top:1px solid rgba(255,255,255,.08); border-radius:0 0 8px 8px; }
 #vpBriS { position:absolute; bottom:52px; transform:translateX(-50%); width:44px; height:170px; padding:10px 0 8px; border-radius:12px; background:rgba(20,22,28,.95); box-shadow:0 10px 30px rgba(0,0,0,.6); display:flex; flex-direction:column; align-items:center; gap:6px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:6; } #vpBriS.on { opacity:1; pointer-events:auto; } #vpBriS input { writing-mode:vertical-lr; direction:rtl; width:20px; height:120px; accent-color:#3D7BFF; } #vpBriS b { font-size:11px; font-weight:600; }
+
+/* menus do player (legendas, áudio, botão direito): mesmo visual */
+#vplayer .vpmenu { min-width:340px; max-width:460px; max-height:62vh; overflow-y:auto; overscroll-behavior:contain; padding:6px; border-radius:14px; background:rgba(20,22,28,.97); border:1px solid rgba(255,255,255,.08); box-shadow:0 18px 50px rgba(0,0,0,.65); }
+#vplayer .vpmenu::-webkit-scrollbar { width:8px; } #vplayer .vpmenu::-webkit-scrollbar-thumb { background:#2c3038; border-radius:4px; }
+#vplayer .vpmh { padding:10px 12px 6px; font:700 11px "Poppins",sans-serif; letter-spacing:.1em; text-transform:uppercase; color:#8f8a82; }
+#vplayer .vpmi { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:9px; cursor:pointer; border:0; margin:0; }
+#vplayer .vpmi .ck { width:18px; flex:none; text-align:center; font-style:normal; color:#3D7BFF; font-weight:700; }
+#vplayer .vpmi .t { display:flex; flex-direction:column; min-width:0; } #vplayer .vpmi .t b { font-weight:500; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #vplayer .vpmi .t small { font-size:11.5px; color:#8f8a82; margin:1px 0 0; opacity:1; }
+#vplayer .vpmi.on .t b { color:#3D7BFF; font-weight:600; } #vplayer .vpmi.dim { opacity:.45; }
+#vplayer .vpmi.vpick { margin-top:4px; border-top:1px solid rgba(255,255,255,.07); border-radius:0 0 9px 9px; padding-top:10px; } #vplayer .vpmi.vpick .t b { color:#9fbaff; }
+#vplayer .vpsep { height:1px; background:rgba(255,255,255,.07); margin:6px 4px; }
+#vpCtx { position:fixed; display:none; z-index:20; } #vpCtx.on { display:block; }
+#vplayer #vpCtx { position:fixed; bottom:auto; right:auto; }
