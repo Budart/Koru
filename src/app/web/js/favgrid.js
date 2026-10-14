@@ -320,7 +320,7 @@ async function openFavGrid() {
     allGames = [].concat(...lists).sort((a, b) => a.name.localeCompare(b.name, 'pt', { sensitivity:'base' }));
   }
   const keys = new Set(favKeys().map(k => k.slice(4)));
-  fg.items = allGames.filter(g => keys.has(coverKey(g))).sort(nameCmp);
+  fg.items = allGames.filter(g => keys.has(coverKey(g)) && !g.priv).sort(nameCmp);
   shown = fg.items; fg.sel = Math.min(fg.sel, Math.max(0, fg.items.length - 1)); fg.page = 0; gIdx = fg.sel; if (fg.items[fg.sel]) sys = sysOf(fg.items[fg.sel]);
   renderFavGrid();
 }

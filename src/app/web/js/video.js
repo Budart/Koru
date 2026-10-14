@@ -60,7 +60,7 @@ function playCandidate(g, list, k) {
 }
 function queueVideo(g) {
   stopVideo();
-  if (bgKind !== 'video' || !document.hasFocus() || SMALL.matches) return;   // janela pequena: sem vídeo (economia)
+  if (bgKind !== 'video' || !document.hasFocus() || SMALL.matches || ((sysOf(g) || {}).type === 'video')) return;   // janela pequena: sem vídeo (economia)
   vidFor = g;
   vidTimer = setTimeout(async () => {   // espera o usuário "parar" no jogo (evita carregar vídeos ao rolar a lista)
     if (vidFor !== g || shown[gIdx] !== g) return;

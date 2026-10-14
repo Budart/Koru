@@ -12,7 +12,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 // Janela própria sem barra de título (WebView2 = motor do Edge embutido)
-static class WebHost
+static partial class WebHost
 {
     static string BinDir;
     // janela sem borda, mas redimensionável pelas bordas (faixa de 6 px em volta)
@@ -163,7 +163,7 @@ static class WebHost
         view = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(18, 18, 18) };
         form.Controls.Add(view);
         // o controle só funciona com o foco dentro da página: devolve o foco ao WebView sempre que a janela é ativada
-        form.Activated += (s, e) => { try { if (view != null && !GameOn) view.Focus(); } catch { } };
+        form.Activated += (s, e) => { try { if (PlayerOn) FocusPlayer(); else if (view != null && !GameOn) view.Focus(); } catch { } };
         // janela sem foco / minimizada: vídeo mudo e pausado, e o WebView2 usa menos memória
         form.Activated += (s, e) => { try { if (ready) { view.CoreWebView2.ExecuteScriptAsync("window.vidAwaySet&&vidAwaySet(false)"); view.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal; } } catch { } };
         form.Deactivate += (s, e) => { try { if (ready) { view.CoreWebView2.ExecuteScriptAsync("window.vidAwaySet&&vidAwaySet(true)"); view.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; } } catch { } };
@@ -301,16 +301,18 @@ static class WebHost
             int ver = 14; bool[] was = new bool[4]; var st = new byte[64];
             while (true)
             {
+                bool padUsed = false;
                 for (int i = 0; i < 4; i++)
                 {
                     int r;
                     try { r = ver == 14 ? XInputGetStateEx14(i, st) : XInputGetStateEx13(i, st); }
                     catch { if (ver == 14) { ver = 13; continue; } return; }
+                    if (r == 0 && PlayerOn && !padUsed) { padUsed = true; var b0 = BitConverter.ToUInt16(st, 4); byte l0 = st[6], r0 = st[7]; try { PadPlayer(b0, l0, r0); } catch { } }
                     bool down = r == 0 && (BitConverter.ToUInt16(st, 4) & 0x0400) != 0;
                     if (down && !was[i]) form.BeginInvoke((Action)ShowFromHome);
                     was[i] = down;
                 }
-                Thread.Sleep(80);
+                Thread.Sleep(PlayerOn ? 30 : 80);
             }
         }) { IsBackground = true, Priority = ThreadPriority.BelowNormal }.Start();
     }

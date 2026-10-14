@@ -191,6 +191,7 @@ document.addEventListener('keydown', e => {
     return;   // Enter/Espaço apertam o botão em foco (comportamento nativo)
   }
   if ($('ctx').classList.contains('on')) { e.preventDefault(); if (e.key === 'ArrowDown') ctxMove(1); else if (e.key === 'ArrowUp') ctxMove(-1); else if (e.key === 'Enter' || e.key === ' ') ctxOk(); else if (e.key === 'ArrowRight') ctxRight(); else if (e.key === 'Escape' || e.key === 'ArrowLeft') ctxLeft(); return; }
+  if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h') && screen === 'games') { e.preventDefault(); togglePriv(); return; }
   if (e.key === 'F4' && screen === 'systems') { e.preventDefault(); openTradutor(); return; }
   if (e.key === 'F1' && screen === 'favgrid' && !modalOpen && !$('ctx').classList.contains('on') && typeof fp !== 'undefined' && !fp.open) { e.preventDefault(); fgInput('menu'); return; }
   if (e.key === 'F1') { e.preventDefault(); if (screen !== 'config' && screen !== 'welcome') { if (modalOpen) closeCover(); openConfig(); } return; }
@@ -286,7 +287,7 @@ function padState(p) {
       if (v >= 0 && v <= 7) { hu = v === 0 || v === 1 || v === 7; hr = v >= 1 && v <= 3; hd = v >= 3 && v <= 5; hl = v >= 5 && v <= 7; }
     }
   }
-  return { up: b(12) || hu || ay < -.6, down: b(13) || hd || ay > .6, left: b(14) || hl || ax < -.6, right: b(15) || hr || ax > .6, ok: b(0), back: b(1), fav: b(2), menu: b(3), pgup: b(4), pgdn: b(5), select: b(8), start: b(9), search: b(10) || b(11) };
+  return { up: b(12) || hu || ay < -.6, down: b(13) || hd || ay > .6, left: b(14) || hl || ax < -.6, right: b(15) || hr || ax > .6, ok: b(0), back: b(1), fav: b(2), menu: b(3), pgup: b(4), pgdn: b(5), select: b(8), start: b(9), search: b(10) || b(11), both: b(10) && b(11) };
 }
 let padLast = null;   // controle usado por último (define os símbolos da legenda)
 function pollPad1() {
@@ -297,6 +298,7 @@ function pollPad1() {
   const legendPad = pads.find(p => p.id === padLast) || pads[0];
   if (typeof updatePadHelp === 'function') updatePadHelp(legendPad);
   // Xbox / PlayStation / Nintendo / genéricos: A/✕ ok · B/○ voltar · X/□ · Y/△ menu · LB/RB pular · Start configuração · Select modo TV
+  { const bo = states.some(x => x.both); if (bo && !pollPad1._both) togglePriv(); pollPad1._both = bo; }
   if (pads.length && (!renaming || oskOpen) && screen !== 'welcome') {
     const st = {}; states.forEach(x => { for (const k in x) st[k] = st[k] || x[k]; });
     const now = performance.now();
@@ -324,3 +326,10 @@ window.addEventListener('gamepadconnected', e => { padLast = e.gamepad.id; toast
 ['q', 'sortBtn', 'catBtn'].forEach(id => $(id) && $(id).addEventListener('blur', () => $(id).classList.remove('padsel')));
 
 document.addEventListener('keyup', e => { if (e.key === 'Control' && screen === 'systems' && sysMoving) sysMoveInput('fav'); });
+
+// vídeos da pasta privada: revela/oculta (discreto, sem aviso na legenda)
+function togglePriv() {
+  if (screen !== 'games' || !sys || sys.type !== 'video' || globalMode) return;
+  if (!games.some(g => g.priv)) return;
+  privOn = !privOn; sfx('tick'); refilterKeep();
+}

@@ -314,7 +314,9 @@ function bindDrop(el) {
 let favMode = false;
 const isFavG = g => covers['fav|' + coverKey(g)] === '1';
 // monta os grupos (Favoritos, categorias, Ocultos) de uma lista de jogos
+let privOn = false;   // pasta privada de vídeos: só aparece quando revelada (Ctrl+Shift+H / L3+R3), até sair do console
 function makeGroups(match, noFav) {
+  match = match.filter(g => !g.priv || privOn);
   const sorter = (a, b) => (CATS.indexOf(ecat(a)) - CATS.indexOf(ecat(b))) || sortCmp(a, b);
   const favs = noFav ? [] : match.filter(g => !hidden.has(coverKey(g)) && isFavG(g)).sort(sortCmp);
   const vis = match.filter(g => !hidden.has(coverKey(g)) && (noFav || !isFavG(g))).sort(sorter);

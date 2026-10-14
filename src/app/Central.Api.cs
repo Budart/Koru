@@ -56,7 +56,7 @@ static partial class Central
                     var gl = Games(root, c);
                     outp.Add(new Dictionary<string, object> {
                         { "id", S(c, "id") }, { "name", S(c, "name") }, { "art", S(c, "art") }, { "thumbs", S(c, "thumbs") },
-                        { "emulatorOk", IsPc(c) || (emu != "" && File.Exists(emu)) }, { "type", S(c, "type") }, { "logo", S(c, "logo") }, { "bg", S(c, "bg") }, { "enabled", !(c.ContainsKey("enabled") && c["enabled"] is bool && !(bool)c["enabled"]) }, { "count", gl.Count(g => !IsCustom(g)) }, { "customCount", gl.Count(g => IsCustom(g)) } });
+                        { "emulatorOk", IsPc(c) || IsVideo(c) || (emu != "" && File.Exists(emu)) }, { "type", S(c, "type") }, { "logo", S(c, "logo") }, { "bg", S(c, "bg") }, { "enabled", !(c.ContainsKey("enabled") && c["enabled"] is bool && !(bool)c["enabled"]) }, { "count", gl.Count(g => !IsCustom(g)) }, { "customCount", gl.Count(g => IsCustom(g)) } });
                 }
                 SendJson(ctx, outp);
             }
@@ -159,6 +159,33 @@ static partial class Central
             }
             else if (path == "/api/fsarg")
                 SendJson(ctx, new Dictionary<string, object> { { "arg", FullscreenArg(Full(root, req.QueryString["emu"] ?? "")) } });
+            else if (path == "/api/mpv")
+            {
+                if (req.HttpMethod == "POST") WebHost.MpvInstall();
+                SendJson(ctx, new Dictionary<string, object> { { "installed", WebHost.MpvExe() != null }, { "busy", WebHost.MpvBusy }, { "progress", WebHost.MpvProgress }, { "step", WebHost.MpvStep }, { "error", WebHost.MpvError } });
+            }
+            else if (path == "/api/vthumb")
+            {
+                // miniatura do vídeo (um quadro a 20% do filme), gerada pelo mpv e guardada no cache
+                var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == req.QueryString["c"]);
+                string vf = c == null ? "" : Full(root, req.QueryString["p"] ?? ""), exe = WebHost.MpvExe();
+                if (c == null || exe == null || !File.Exists(vf) || !AllDirs(c).Any(rd => vf.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                string td = Path.Combine(CacheDir, "vthumb"), f = Path.Combine(td, Hash(vf + "|" + new FileInfo(vf).Length) + ".jpg");
+                if (!File.Exists(f))
+                {
+                    Directory.CreateDirectory(td); string tmp = Path.Combine(Path.GetTempPath(), "koru-th-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(tmp);
+                    try
+                    {
+                        var p = Process.Start(new ProcessStartInfo(exe, "--no-config --msg-level=all=no --vo=image --vo-image-format=jpg --vo-image-jpeg-quality=88 --vo-image-outdir=\"" + tmp + "\" --frames=1 --start=20% --hr-seek=no --no-audio --no-sub --vf=scale=640:-2 -- \"" + vf + "\"") { UseShellExecute = false, CreateNoWindow = true });
+                        if (!p.WaitForExit(20000)) try { p.Kill(); } catch { }
+                        var o = Directory.GetFiles(tmp, "*.jpg").FirstOrDefault(); if (o != null) File.Copy(o, f, true);
+                    }
+                    catch { }
+                    try { Directory.Delete(tmp, true); } catch { }
+                }
+                if (!File.Exists(f)) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                ctx.Response.Headers["Cache-Control"] = "max-age=31536000"; Send(ctx, 200, "image/jpeg", File.ReadAllBytes(f));
+            }
             else if (path == "/api/tradutor" && req.HttpMethod == "POST")
             {
                 // Tradutor de Tela (app próprio instalado à parte): abre a janela translúcida de tradução
@@ -300,7 +327,8 @@ static partial class Central
                         foreach (Dictionary<string, object> ac in (object[])auto["consoles"]) if (S(ac, "type") == "pc") ac["logo"] = "art:steam";
                 }
                 catch { }
-                foreach (Dictionary<string, object> ac in (object[])auto["consoles"]) { ac["fullscreen"] = false; ac["fsArgs"] = FullscreenArg(Full(S(auto, "root"), S(ac, "emulator"))); }
+                if (S(body, "video") != "" && Directory.Exists(S(body, "video"))) { var cl = ((object[])auto["consoles"]).ToList(); var vc = VideoConsole(S(body, "video")); cl.Add(vc); auto["consoles"] = cl.ToArray(); }
+                foreach (Dictionary<string, object> ac in (object[])auto["consoles"]) { if (IsVideo(ac)) continue; ac["fullscreen"] = false; ac["fsArgs"] = FullscreenArg(Full(S(auto, "root"), S(ac, "emulator"))); }
                 if (S(body, "sgdbKey") != "") { auto["sgdbKey"] = S(body, "sgdbKey"); auto["useSgdb"] = true; }
                 bool runKey = false;
                 try { using (var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) runKey = k.GetValue("Koru") != null; } catch { }
@@ -370,6 +398,15 @@ static partial class Central
                 var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == S(body, "console"));
                 if (c == null) { SendJson(ctx, Err("Console não encontrado"), 404); return; }
                 string emu = Full(root, S(c, "emulator"));
+                if (IsVideo(c))
+                {
+                    string vf = Full(root, S(body, "path"));
+                    bool okv = AllDirs(c).Any(rd => vf.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
+                    if (!okv || !File.Exists(vf)) { SendJson(ctx, Err("Vídeo inválido"), 400); return; }
+                    string er = WebHost.Play(vf, c);
+                    SendJson(ctx, er == null ? new Dictionary<string, object> { { "ok", true } } : Err(er), er == null ? 200 : 400);
+                    return;
+                }
                 if (IsPc(c))
                 {
                     string game = Full(root, S(body, "path"));

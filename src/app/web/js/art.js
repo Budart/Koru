@@ -174,6 +174,7 @@ const SRC_PRIO = { libretro: 6, code: 6, sgdb: 5, steam: 4, wikimain: 2, fandom:
 async function resolveArt0(g) {
   const key = coverKey(g);
   if (covers[key]) return { box: covers[key], snap: null, src: 'manual' };
+  { const sv = (typeof sysOf === 'function' && sysOf(g)) || {}; if (sv.type === 'video') { const u = `/api/vthumb?c=${encodeURIComponent(g.sid || sv.id)}&p=${encodeURIComponent(g.path)}`; return { box: u, snap: u, src: 'video', v: 3 }; } }   // vídeo: quadro do próprio filme
   if (artCache[key] && artCache[key].box) return artCache[key];
   const q = cleanTitle(dn(g)) || dn(g), S = (typeof sysOf === 'function' && sysOf(g)) || {}, pc = S.type === 'pc', t0 = Date.now();
   const sgP = sgdbOn ? sgdbArt(g).catch(() => null) : Promise.resolve(null);

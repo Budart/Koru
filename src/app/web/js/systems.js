@@ -50,7 +50,7 @@ async function openSystem(id) {
   sys = id ? systems.find(s => s.id === id) : systems[sysIdx];
   if (!sys) return;
   if (sys.virtual) { sysIdx = systems.indexOf(sys); return openFavorites(); }
-  sysIdx = systems.indexOf(sys); globalMode = false; favMode = false; if (typeof favViewsPaint === 'function') favViewsPaint(); sfx('ok'); music.play(sys.type === 'pc' ? 'pc' : sys.id);
+  sysIdx = systems.indexOf(sys); globalMode = false; favMode = false; privOn = false; if (typeof favViewsPaint === 'function') favViewsPaint(); sfx('ok'); music.play(sys.type === 'pc' || sys.type === 'video' ? 'pc' : sys.id);
   show('games'); history.replaceState(null, '', '#' + sys.id);
   $('gHead').innerHTML = logo(sys);
   setBg(bgUrlOf(sys), '');

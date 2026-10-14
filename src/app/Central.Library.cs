@@ -75,7 +75,7 @@ static partial class Central
         if (c.TryGetValue("storeDirs", out v) && v is Dictionary<string, object>) foreach (var kv in (Dictionary<string, object>)v) if (kv.Value != null && kv.Value.ToString().Trim() != "") r[kv.Key] = kv.Value.ToString().Trim();
         return r;
     }
-    static List<string> AllDirs(Dictionary<string, object> c) { var l = L(c, "romDirs").Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); l.AddRange(StoreDirsOf(c).Values); return l; }
+    static List<string> AllDirs(Dictionary<string, object> c) { var l = L(c, "romDirs").Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); l.AddRange(StoreDirsOf(c).Values); if (IsVideo(c)) l.AddRange(L(c, "privateDirs").Where(x => !string.IsNullOrWhiteSpace(x))); return l; }
     static readonly Regex StoreLink = new Regex(@"steam://|com\.epicgames\.launcher://|goggalaxy://|uplay://|origin2?://|battlenet://", RegexOptions.IgnoreCase);
     static readonly Regex StoreDir = new Regex(@"\\Start Menu\\Programs\\(Steam|GOG\.com|Epic Games)\\|\\XboxGames\\", RegexOptions.IgnoreCase);
     // o mesmo jogo em pastas diferentes (mesmo destino ou mesmo nome) aparece uma vez só; vence o atalho "oficial" da loja
@@ -136,6 +136,14 @@ static partial class Central
                     if (B(c, "nameFromFolder") && list.Count == 1 &&
                         !f.Directory.FullName.TrimEnd('\\').Equals(dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                         name = f.Directory.Name;
+                    if (IsVideo(c))
+                    {   // vídeos: categoria = 1ª subpasta; pasta privada só aparece quando o usuário revela
+                        string rel = f.DirectoryName.Length > dir.TrimEnd('\\').Length ? f.DirectoryName.Substring(dir.TrimEnd('\\').Length).Trim('\\') : "";
+                        bool priv = L(c, "privateDirs").Any(x => !string.IsNullOrWhiteSpace(x) && Full(root, x).TrimEnd('\\').Equals(dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+                        var vg = new Dictionary<string, object> { { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds }, { "cat", rel == "" ? "" : rel.Split('\\')[0] } };
+                        if (priv) vg["priv"] = true;
+                        games.Add(vg); continue;
+                    }
                     games.Add(new Dictionary<string, object> {
                         { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds },
                         { "cat", IsPc(c) ? PcCategory(f) : Category(f.FullName.Substring(dir.Length)) }

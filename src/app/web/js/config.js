@@ -22,6 +22,8 @@ const CF_SECS = [['geral', 'Geral'], ['consoles', 'Consoles'], ['capas', 'Capas 
 let cfSec = 'geral';
 // créditos e licenças (as imagens do tema carbon são CC BY-NC-SA: exigem atribuição)
 const CREDITS = [
+  ['mpv', 'mpv-player', 'Player de vídeo usado em Filmes e vídeos (baixado do site oficial na primeira vez).', [['mpv.io', 'https://mpv.io']]],
+  ['Filtros de upscaling', 'Anime4K (bloc97) · FSRCNNX (igv) · AMD FSR/CAS e NVIDIA NIS (versões GLSL de hooke007)', 'Upscaling e nitidez por GPU no player.', [['Anime4K', 'https://github.com/bloc97/Anime4K'], ['FSRCNNX', 'https://github.com/igv/FSRCNN-TensorFlow'], ['mpv_PlayKit', 'https://github.com/hooke007/mpv_PlayKit']]],
   ['Tema "carbon" para EmulationStation', 'Rookervik — baseado no tema "simple" de Nils Bonenberger', 'Logos, fundos e desenhos de controle dos consoles. Licença CC BY-NC-SA (atribuição, uso não comercial, compartilha igual). As imagens são exibidas sem alteração de conteúdo (apenas redimensionadas/recortadas na tela).', [['Repositório (fabricecaruso)', 'https://github.com/fabricecaruso/es-theme-carbon'], ['Repositório (RetroPie, reserva)', 'https://github.com/RetroPie/es-theme-carbon'], ['Licença CC BY-NC-SA', 'https://creativecommons.org/licenses/by-nc-sa/4.0/deed.pt_BR']]],
   ['libretro-thumbnails', 'Projeto libretro / RetroArch e colaboradores', 'Capas, telas e títulos de jogos.', [['Repositório', 'https://github.com/libretro-thumbnails/libretro-thumbnails']]],
   ['SteamGridDB', 'Comunidade SteamGridDB', 'Capas, fundos e logos (opcional, com a sua chave da API).', [['Site', 'https://www.steamgriddb.com/']]],
@@ -69,14 +71,15 @@ function renderConfig() {
       <label class="chk2"><input type="checkbox" id="cfAuto" ${cfg.autostart === false ? '' : 'checked'}> Abrir na inicialização do Windows (em segundo plano, perto do relógio)</label>
     </div>
     `) +
-    sec('consoles', '🎮 Consoles e emuladores', `<div class="cfadd"><button class="btn sec" id="cfAdd">+ Adicionar console</button> <button class="btn sec" id="cfAddPc">+ Adicionar jogos de PC</button></div><div class="cfgrid">
+    sec('consoles', '🎮 Consoles e emuladores', `<div class="cfadd"><button class="btn sec" id="cfAdd">+ Adicionar console</button> <button class="btn sec" id="cfAddPc">+ Adicionar jogos de PC</button> <button class="btn sec" id="cfAddVid">+ Adicionar filmes e vídeos</button></div><div class="cfgrid">
       ${cs.map((c, i) => `
       <div class="ccard${c.enabled === false ? ' off' : ''}">
         <div class="top"><button class="icobtn" data-ico="${i}" title="Trocar ícone"><img src="${logoUrl(c)}" alt="" onerror="this.style.opacity=.2"><span>trocar ícone</span></button><button class="icobtn bgb" data-bgp="${i}" title="Trocar fundo do console" style="background-image:url('${bgUrlOf(c)}')"><span>trocar fundo</span></button><input data-i="${i}" data-k="name" value="${esc(c.name)}"><label class="chk2 en"><input type="checkbox" data-en="${i}" ${c.enabled === false ? '' : 'checked'}> Habilitar</label></div>
         <div class="icopick" id="ip${i}" style="display:none"></div>
-        ${c.type === 'pc' ? `<div class="msg">🖥 Jogos de PC — escolha uma ou mais pastas com atalhos (.lnk / .url / .exe) dos jogos instalados. Eles abrem direto, sem emulador.</div>` : fieldHtml(i, 'emulator', 'Emulador (.exe)', c.emulator || '', 'file') + fieldHtml(i, 'args', 'Argumentos — {rom} é trocado pelo caminho do jogo', c.args || '"{rom}"') + `<div class="fld"><label class="chk2"><input type="checkbox" data-fs="${i}" ${c.fullscreen === true ? 'checked' : ''}> Abrir os jogos em tela cheia</label></div>` + fieldHtml(i, 'fsArgs', 'Argumento de tela cheia deste emulador (vai antes dos argumentos)', c.fsArgs == null ? '' : c.fsArgs)}
+        ${c.type === 'video' ? videoCardHtml(i, c) : c.type === 'pc' ? `<div class="msg">🖥 Jogos de PC — escolha uma ou mais pastas com atalhos (.lnk / .url / .exe) dos jogos instalados. Eles abrem direto, sem emulador.</div>` : fieldHtml(i, 'emulator', 'Emulador (.exe)', c.emulator || '', 'file') + fieldHtml(i, 'args', 'Argumentos — {rom} é trocado pelo caminho do jogo', c.args || '"{rom}"') + `<div class="fld"><label class="chk2"><input type="checkbox" data-fs="${i}" ${c.fullscreen === true ? 'checked' : ''}> Abrir os jogos em tela cheia</label></div>` + fieldHtml(i, 'fsArgs', 'Argumento de tela cheia deste emulador (vai antes dos argumentos)', c.fsArgs == null ? '' : c.fsArgs)}
         ${dirsHtml(i, c)}
-        ${fieldHtml(i, 'extensions', 'Extensões dos jogos (separadas por vírgula)', (c.extensions || []).join(', '))}
+        ${fieldHtml(i, 'extensions', c.type === 'video' ? 'Extensões dos vídeos (separadas por vírgula)' : 'Extensões dos jogos (separadas por vírgula)', (c.extensions || []).join(', '))}
+        ${c.type === 'video' ? videoPrivHtml(i, c) : ''}
       </div>`).join('')}
     </div>`) +
     sec('capas', '🖼 Capas e vídeo', `<div class="cfcache">
@@ -145,7 +148,7 @@ function renderConfig() {
   bindLinks($('cfBody'));
   $('cfBody').querySelectorAll('button[data-href]').forEach(b => b.onclick = () => api('/api/open', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: b.dataset.href }) }).catch(() => {}));
   $('cfBody').querySelectorAll('[data-fs]').forEach(el => el.onchange = () => { cfg.consoles[+el.dataset.fs].fullscreen = el.checked; });
-  cfg.consoles.forEach(async (c, i) => { if (c.fsArgs == null && c.emulator && c.type !== 'pc') { try { const r = await api('/api/fsarg?emu=' + encodeURIComponent(c.emulator)); c.fsArgs = r.arg; const el = $('cfBody').querySelector(`[data-i="${i}"][data-k="fsArgs"]`); if (el) el.value = r.arg; } catch (e) {} } });
+  cfg.consoles.forEach(async (c, i) => { if (c.fsArgs == null && c.emulator && c.type !== 'pc' && c.type !== 'video') { try { const r = await api('/api/fsarg?emu=' + encodeURIComponent(c.emulator)); c.fsArgs = r.arg; const el = $('cfBody').querySelector(`[data-i="${i}"][data-k="fsArgs"]`); if (el) el.value = r.arg; } catch (e) {} } });
   $('cfCacheOn').onchange = () => { cfg.coverCache = $('cfCacheOn').checked; };
   $('cfCacheClear').onclick = () => cacheClear('all');
   document.querySelectorAll('[data-cc]').forEach(b => b.onclick = () => cacheClear(b.dataset.cc));
@@ -154,8 +157,10 @@ function renderConfig() {
   $('cfBody').querySelectorAll('[data-ico]').forEach(el => el.onclick = () => iconPicker(+el.dataset.ico, 'logo'));
   $('cfBody').querySelectorAll('[data-bgp]').forEach(el => el.onclick = () => iconPicker(+el.dataset.bgp, 'bg'));
   $('cfAddPc').onclick = () => { cfg.consoles.push({ id: 'pc' + Date.now(), type: 'pc', name: 'Jogos de PC', art: 'pc', thumbs: '', emulator: '', args: '', romDirs: [], extensions: ['lnk', 'url', 'exe'] }); renderConfig(); $('cfMain').scrollTop = 1e9; const cc = [...document.querySelectorAll('#cfBody .cfsec.on .ccard')].pop(); if (cc && typeof cfgMark === 'function' && document.querySelector('#cfBody .kbf')) cfgMark(cc); };
+  $('cfAddVid').onclick = () => { cfg.consoles.push(Object.assign({ id: 'v' + Date.now(), name: 'Filmes e vídeos' }, VIDEO_DEF)); renderConfig(); $('cfMain').scrollTop = 1e9; };
+  videoCardBind();
   $('cfAdd').onclick = () => { cfg.consoles.push({ id: 'c' + Date.now(), name: 'Novo console', art: '', thumbs: '', emulator: '', args: '"{rom}"', romDirs: [], extensions: [] }); renderConfig(); $('cfMain').scrollTop = 1e9; const cc = [...document.querySelectorAll('#cfBody .cfsec.on .ccard')].pop(); if (cc && typeof cfgMark === 'function' && document.querySelector('#cfBody .kbf')) cfgMark(cc); };
-  cs.forEach((c, i) => checkEmu(i));
+  cs.forEach((c, i) => { if (c.type !== 'video') checkEmu(i); });
   $('cfBody').querySelectorAll('.icobtn.bgb').forEach(b => { const m = (b.style.backgroundImage || '').match(/url\("?(.*?)"?\)$/); if (m) setBgImage(b, m[1]); });   // fundos com reserva
 }
 const ICON_ART = ['pc','windows','steam','snes','nes','n64','gc','wii','wiiu','switch','gb','gbc','gba','nds','3ds','mastersystem','megadrive','genesis','segacd','32x','saturn','dreamcast','neogeo','arcade','mame','psx','ps2','ps3','ps4','psp','psvita','xbox','xbox360','atari2600','pcengine'];
@@ -217,12 +222,58 @@ function pcStoreMigrate(c) {   // pasta padrão de loja que estava na lista comu
   Object.keys(c.storeDirs).forEach(id => { if (!cfStores.some(st => st.id === id)) { if (c.storeDirs[id]) c.romDirs.push(c.storeDirs[id]); delete c.storeDirs[id]; } });   // lojas que não são mais oferecidas viram pastas comuns
   cfStores.forEach(st => { const j = (c.romDirs || []).findIndex(d => d.trim().toLowerCase().replace(/\\$/, '') === st.path.toLowerCase().replace(/\\$/, '')); if (j >= 0 && c.storeDirs[st.id] == null) { c.storeDirs[st.id] = c.romDirs[j]; c.romDirs.splice(j, 1); } });
 }
+/* ---------- card de Filmes e vídeos ---------- */
+const VIDEO_EXT = ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'm4v', 'webm', 'flv', 'ts', 'm2ts', 'mts', 'mpg', 'mpeg', 'vob', 'ogv', '3gp', 'rmvb', 'divx', 'iso'];
+const VIDEO_DEF = { type: 'video', art: '', thumbs: '', emulator: '', args: '', romDirs: [], privateDirs: [], extensions: VIDEO_EXT, upscale: 'off', aspect: 'auto', videoFull: true, subOn: true, subLang: 'pt,por,pob,pt-BR,en,eng', subSize: '46', subColor: 'white', subBg: 'outline', subPos: '95' };
+const UPSCALE = [['off', 'Desligado'], ['fsr', 'AMD FSR (leve, qualquer placa)'], ['nis', 'NVIDIA NIS (leve, qualquer placa)'], ['cas', 'Só nitidez (AMD CAS)'], ['fsrcnnx', 'FSRCNNX — IA, ideal para filmes'], ['anime4k', 'Anime4K — ideal para anime'], ['rtx', 'NVIDIA RTX Video Super Resolution (RTX)'], ['intel', 'Intel Video Super Resolution']];
+const ASPECTS_V = [['auto', 'Original'], ['16:9', '16:9'], ['4:3', '4:3'], ['21:9', '21:9 (ultrawide)'], ['9:16', 'Vertical 9:16'], ['1:1', 'Quadrado 1:1'], ['fill', 'Preencher a tela (corta as bordas)'], ['stretch', 'Esticar (tela cheia)']];
+function vSel(i, k, list, v) { return `<select data-vk="${i}|${k}">${list.map(([a, b]) => `<option value="${a}"${String(v) === a ? ' selected' : ''}>${b}</option>`).join('')}</select>`; }
+function videoCardHtml(i, c) {
+  for (const k in VIDEO_DEF) if (c[k] == null) c[k] = Array.isArray(VIDEO_DEF[k]) ? VIDEO_DEF[k].slice() : VIDEO_DEF[k];
+  return `<div class="msg">🎬 Filmes e vídeos — tocam no player do Koru, em qualquer formato (MKV, MP4, AVI, HEVC, AV1, DTS, legendas…).</div>
+  <div class="fld vplayer"><label>Player (mpv)</label><div class="line"><span class="msg" id="vMpv${i}">verificando…</span><button class="btn sec sm" data-vmpv="${i}">Baixar / atualizar</button></div></div>
+  <div class="fld vgrid">
+    <div><label>Upscaling padrão</label>${vSel(i, 'upscale', UPSCALE, c.upscale)}</div>
+    <div><label>Proporção padrão</label>${vSel(i, 'aspect', ASPECTS_V, c.aspect)}</div>
+  </div>
+  <div class="fld"><label class="chk2"><input type="checkbox" data-vk="${i}|videoFull" ${c.videoFull !== false ? 'checked' : ''}> Abrir os vídeos em tela cheia</label></div>
+  <div class="fld vsub"><label>Legendas</label>
+    <label class="chk2"><input type="checkbox" data-vk="${i}|subOn" ${c.subOn !== false ? 'checked' : ''}> Mostrar legendas</label>
+    <div class="vgrid">
+      <div><label>Idiomas preferidos (em ordem)</label><input data-vk="${i}|subLang" value="${esc(c.subLang)}" spellcheck="false"></div>
+      <div><label>Cor</label>${vSel(i, 'subColor', [['white', 'Branca'], ['yellow', 'Amarela'], ['cyan', 'Ciano']], c.subColor)}</div>
+      <div><label>Estilo</label>${vSel(i, 'subBg', [['outline', 'Contorno'], ['shadow', 'Sombra'], ['box', 'Caixa escura']], c.subBg)}</div>
+      <div><label>Tamanho <b id="vSz${i}">${c.subSize}</b></label><input type="range" min="26" max="90" data-vk="${i}|subSize" value="${c.subSize}"></div>
+      <div><label>Altura <b id="vPs${i}">${c.subPos}</b></label><input type="range" min="60" max="100" data-vk="${i}|subPos" value="${c.subPos}"></div>
+    </div>
+    <div class="msg">Legendas .srt / .ass com o mesmo nome do vídeo são carregadas sozinhas.</div>
+  </div>
+  <div class="msg vkeys"><b>No vídeo:</b> Espaço/A pausa · ← →/D-pad ±10 s · PgUp PgDn/LB RB ±1 min · ↑ ↓ volume · S/X legenda · A/Y áudio · Ctrl+scroll/LT RT proporção · U/Select upscaling · F/Start/duplo clique tela cheia · Esc/B sair</div>`;
+}
+function videoPrivHtml(i, c) {
+  if (!c.privateDirs) c.privateDirs = [];
+  return `<details class="vadv"><summary>⋯</summary><div class="fld"><label>Pasta privada</label>${c.privateDirs.map((d, j) => `<div class="line dline"><input data-vp="${i}|${j}" value="${esc(d)}" spellcheck="false" placeholder="Caminho da pasta"><button class="btn sec sm" data-bvp="${i}|${j}">...</button><button class="btn sec sm dx" data-xvp="${i}|${j}">Excluir</button></div>`).join('')}<div class="line"><button class="btn sec sm" data-vpa="${i}">+ Pasta</button></div><div class="msg">Os vídeos destas pastas ficam escondidos. Na lista, Ctrl+Shift+H (ou L3+R3 no controle) mostra/esconde; ao sair, voltam a ficar escondidos.</div></div></details>`;
+}
+async function vMpvStatus() { try { const st = await api('/api/mpv'); document.querySelectorAll('[id^=vMpv]').forEach(e => e.textContent = st.busy ? `${st.step} ${st.progress}%` : st.installed ? '✓ instalado' : 'não baixado ainda (baixa sozinho ao abrir o 1º vídeo)'); if (st.busy) setTimeout(vMpvStatus, 800); } catch (e) {} }
+function videoCardBind() {
+  const B = $('cfBody'), rer = () => { const y = $('cfMain').scrollTop; renderConfig(); $('cfMain').scrollTop = y; const d = B.querySelector('.vadv'); if (d) d.open = true; };
+  B.querySelectorAll('[data-vk]').forEach(el => { const [i, k] = el.dataset.vk.split('|'); const c = cfg.consoles[+i];
+    const up = () => { c[k] = el.type === 'checkbox' ? el.checked : el.value; if (k === 'subSize') $('vSz' + i).textContent = el.value; if (k === 'subPos') $('vPs' + i).textContent = el.value; };
+    el.oninput = up; el.onchange = up; });
+  B.querySelectorAll('[data-vmpv]').forEach(el => el.onclick = async () => { try { await api('/api/mpv', { method:'POST' }); } catch (e) {} vMpvStatus(); });
+  B.querySelectorAll('[data-vp]').forEach(el => el.oninput = () => { const [i, j] = el.dataset.vp.split('|'); cfg.consoles[+i].privateDirs[+j] = el.value.trim(); });
+  B.querySelectorAll('[data-xvp]').forEach(el => el.onclick = () => { const [i, j] = el.dataset.xvp.split('|'); cfg.consoles[+i].privateDirs.splice(+j, 1); rer(); });
+  B.querySelectorAll('[data-vpa]').forEach(el => el.onclick = () => { cfg.consoles[+el.dataset.vpa].privateDirs.push(''); rer(); });
+  B.querySelectorAll('[data-bvp]').forEach(el => el.onclick = async () => { const [i, j] = el.dataset.bvp.split('|'), c = cfg.consoles[+i];
+    try { const r = await api('/api/browse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type: 'folder', start: c.privateDirs[+j] || '' }) }); if (r.path) { c.privateDirs[+j] = r.path; rer(); } } catch (e) { toast(e.message, true); } });
+  if (B.querySelector('[id^=vMpv]')) vMpvStatus();
+}
 function dirsHtml(i, c) {
   const pc = c.type === 'pc'; pcStoreMigrate(c);
   if (!c.romDirs) c.romDirs = []; if (!c.romDirs.length && !(pc && c.storeDirs && Object.keys(c.storeDirs).length)) c.romDirs.push('');
   const row = (attr, v, del) => `<div class="line dline"><input ${attr} value="${esc(v)}" spellcheck="false" placeholder="Caminho da pasta"><button class="btn sec sm" ${attr.replace('data-', 'data-b')}>...</button>${del ? `<button class="btn sec sm dx" ${attr.replace('data-', 'data-x')}>Excluir pasta</button>` : ''}</div>`;
   const stores = pc && cfStores ? `<div class="fld"><label>Loja</label>${cfStores.map(st => { const on = c.storeDirs && c.storeDirs[st.id] != null; return `<div class="stbox${on ? ' on' : ''}"><label class="chk2"><input type="checkbox" data-st="${i}|${st.id}"${on ? ' checked' : ''}> ${esc(st.name)}${st.exists ? '' : ' <i class="dim">(pasta padrão não encontrada)</i>'}</label>${on ? row(`data-sd="${i}|${st.id}"`, c.storeDirs[st.id], false) : ''}</div>`; }).join('')}</div>` : '';
-  return stores + `<div class="fld"><label>${pc ? 'Pastas com atalhos dos jogos (.lnk / .url / .exe)' : 'Pastas de jogos'}</label>${c.romDirs.map((d, j) => row(`data-rd="${i}|${j}"`, d, true)).join('')}<div class="line"><button class="btn sec sm" data-rda="${i}">+ Adicionar pasta</button></div></div>`;
+  return stores + `<div class="fld"><label>${pc ? 'Pastas com atalhos dos jogos (.lnk / .url / .exe)' : c.type === 'video' ? 'Pastas de filmes e vídeos' : 'Pastas de jogos'}</label>${c.romDirs.map((d, j) => row(`data-rd="${i}|${j}"`, d, true)).join('')}<div class="line"><button class="btn sec sm" data-rda="${i}">+ Adicionar pasta</button></div></div>`;
 }
 function dirsBind() {
   const B = $('cfBody'), rer = (focusSel) => { const y = $('cfMain').scrollTop; renderConfig(); $('cfMain').scrollTop = y; if (focusSel) { const el = $('cfBody').querySelector(focusSel); if (el) { el.focus(); if (typeof cfgMark === 'function' && document.querySelector('#cfBody .kbf')) cfgMark(el); } } };

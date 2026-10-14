@@ -3,3 +3,4 @@
 *.bak.*
 *.wav
 central-config.json
+vendor/

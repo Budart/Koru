@@ -158,6 +158,7 @@ async function launch() {
 }
 async function doLaunch(g) {
   const s = sysOf(g);
+  if (s.type === 'video') return playVideo(g);
   if (s.type !== 'pc' && !s.emulatorOk) {   // sem emulador: oferece escolher agora e já abre o jogo
     const rec = EMU_REC[g.sid || s.id];
     if (rec) {   // lista os emuladores mais conhecidos com o site oficial de cada um (nada é baixado)
@@ -188,3 +189,26 @@ function coverNav(dir) {
   its.forEach((e, j) => e.classList.toggle('kb', j === k)); its[k].scrollIntoView({ block:'nearest' }); sfx('tick');
 }
 function coverPick() { const el = $('cres').querySelector('.it.kb'); if (el) { el.click(); return true; } return false; }
+
+/* ---------- filmes e vídeos: player embutido (mpv) ---------- */
+async function mpvReady(interactive) {
+  let st; try { st = await api('/api/mpv'); } catch (e) { return false; }
+  if (st.installed && !st.busy) return true;
+  if (!st.busy) {
+    if (!interactive || !await ask('Baixar o player de vídeo?', 'Para tocar filmes e vídeos de qualquer formato, o Koru usa o <b>mpv</b> (gratuito e de código aberto). Ele é baixado uma vez só do site oficial, junto com os filtros de upscaling (cerca de 40 MB).', 'Baixar agora')) return false;
+    try { st = await api('/api/mpv', { method:'POST' }); } catch (e) { toast(e.message, true); return false; }
+  }
+  while (true) {
+    await new Promise(r => setTimeout(r, 700));
+    try { st = await api('/api/mpv'); } catch (e) { return false; }
+    if (st.error) { toast('Não foi possível baixar o player: ' + st.error, true); return false; }
+    if (!st.busy) { if (st.installed) { toast('Player de vídeo pronto!'); return true; } return false; }
+    toast(`${st.step || 'Baixando...'} ${st.progress || 0}%`);
+  }
+}
+async function playVideo(g) {
+  if (!await mpvReady(true)) return false;
+  sfx('launch'); music.pause();
+  try { await api('/api/launch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid || sys.id, path: g.path }) }); return true; }
+  catch (e) { toast(e.message, true); return false; }
+}
