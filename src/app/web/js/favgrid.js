@@ -696,6 +696,7 @@ function fgLaunch(noWait) {
 // lista de jogos dos consoles: parte do painel da capa, com o fundo do jogo (ou a capa)
 function listLaunch() {
   const g = shown[gIdx]; if (!g || fxOpen) return;
+  if ((sysOf(g) || {}).type === 'video') { openVPlayer(g); return; }   // vídeo: player na janela, sem animação/tela cheia
   if (!emuReady(g)) { launch(); return; }
   const right = document.querySelector('#games .right') || $('art'), a = cachedArt(g);
   const src = covers['bg|' + coverKey(g)] || (a && (a.snap || a.box)) || (lastArt && lastArt.g === g && lastArt.url);   // fundo do jogo > tela > capa

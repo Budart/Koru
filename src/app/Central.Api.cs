@@ -53,6 +53,15 @@ static partial class Central
 
             if (path == "/" || path == "/index.html" || path == "/config" || path == "/welcome")
                 Send(ctx, 200, "text/html; charset=utf-8", Utf8.GetBytes(Resource("web/index.html")));
+            else if (path.StartsWith("/img/") && !path.Contains(".."))
+            {
+                using (var st = Assembly.GetExecutingAssembly().GetManifestResourceStream("web" + path))
+                {
+                    if (st == null) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                    var ms = new MemoryStream(); st.CopyTo(ms); ctx.Response.Headers["Cache-Control"] = "max-age=31536000";
+                    Send(ctx, 200, path.EndsWith(".png") ? "image/png" : "image/jpeg", ms.ToArray()); ctx.Response.Headers["Cache-Control"] = "max-age=31536000";
+                }
+            }
             else if ((path.StartsWith("/css/") || path.StartsWith("/js/")) && !path.Contains(".."))
             {
                 using (var st = Assembly.GetExecutingAssembly().GetManifestResourceStream("web" + path))

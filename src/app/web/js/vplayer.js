@@ -14,6 +14,7 @@ const VP_ICO = {
   full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   next: '<svg viewBox="0 0 24 24"><path d="M5 5v14l10-7zM16 5h3v14h-3z"/></svg>',
   max: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 9h16" stroke="currentColor" stroke-width="2"/></svg>',
+  bri: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
 };
 const vpUrl = (g, k, extra) => `/api/${k}?c=${encodeURIComponent(g.sid || (sysOf(g) || {}).id)}&p=${encodeURIComponent(g.path)}${extra || ''}`;
@@ -31,6 +32,7 @@ function vpEl() {
       <span class="vptime" id="vpTime">0:00 / 0:00</span><span class="vpgrow"></span>
       <div class="vpmenu-w"><button class="vpb" data-a="sub" title="Legendas (S)">${VP_ICO.sub}</button><div class="vpmenu" id="vpSubs"></div></div>
       <button class="vpb wide" data-a="asp" id="vpAsp" title="Proporção (Ctrl+scroll)">${VP_ICO.asp}<span>Original</span></button>
+      <button class="vpb wide" data-a="bri" id="vpBri" title="Brilho (B) — vídeos HDR costumam ficar escuros">${VP_ICO.bri}<span>100%</span></button>
       <button class="vpb wide" data-a="hq" title="Abrir no player avançado (upscaling, todos os formatos)">${VP_ICO.hq}<span>Upscaling</span></button>
       <button class="vpb" data-a="max" id="vpMax" title="Ocupar a janela toda (W)">${VP_ICO.max}</button><button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
     </div></div></div>`;
@@ -65,6 +67,7 @@ async function openVPlayer(g) {
   v.src = vpUrl(g, 'vfile');
   let pos = 0; try { pos = +(localStorage.getItem('vpos|' + coverKey(g)) || 0); } catch (e) {}
   v.onloadeddata = () => { if (pos > 5 && v.duration && pos < v.duration - 10) v.currentTime = pos; v.onloadeddata = null; };
+  { let b0 = 0; try { b0 = +(localStorage.getItem('vbri|' + coverKey(g)) || 0); } catch (e) {} VP.bri = b0 || (/\b(hdr|hdr10|dv|dovi|dolby.?vision)\b/i.test(g.name || g.path) ? 1.4 : 1); vpBri(0); }
   el.classList.add('on'); if (!el.classList.contains('max')) el.classList.add('win'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
@@ -129,6 +132,7 @@ async function vpAct(a) {
   else if (a === 'sub') $('vpSubs').classList.toggle('on');
   else if (a === 'subnext') { const n = VP.subs.length; if (!n) { vpOsd('Sem legendas'); return; } const k = VP.sub + 1 >= n ? -1 : VP.sub + 1; vpSetSub(k); vpOsd(k < 0 ? 'Legendas desligadas' : 'Legenda: ' + VP.subs[k].name); }
   else if (a === 'asp') vpAspect(1);
+  else if (a === 'bri') vpBri(1);
   else if (a === 'full') { document.body.classList.toggle('vpfull'); if (host) host.postMessage('fs'); setTimeout(vpLayout, 300); }
   else if (a === 'close') vpClose();
   else if (a === 'max') { const el = $('vplayer'); el.classList.toggle('win'); el.classList.toggle('max', !el.classList.contains('win')); setTimeout(vpLayout, 260); }
@@ -154,7 +158,7 @@ function vpInput(a) {
      pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('max'), select: () => vpAct('mute'), search: () => vpAct('next') }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', u: 'hq', U: 'hq', n: 'next', N: 'next', w: 'max', W: 'max', Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri', u: 'hq', U: 'hq', n: 'next', N: 'next', w: 'max', W: 'max', Escape: 'close', Backspace: 'close' };
   e.preventDefault();
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
   if (k === 'PageUp') return vpSeek(-60); if (k === 'PageDown') return vpSeek(60);
@@ -185,3 +189,11 @@ function vpPrev(g) {
 function vpNextOf(g) { const i = shown.indexOf(g); if (i < 0) return null; for (let k = i + 1; k < shown.length; k++) { const s = sysOf(shown[k]) || {}; if (s.type === 'video') return shown[k]; } return null; }
 // antes de excluir: fecha o player e a prévia (o Windows só deixa apagar arquivo que ninguém está usando)
 function vpRelease() { try { if (VP.open) vpClose(); } catch (e) {} try { vpPrevStop(); const v = $('vpV'); if (v) { v.removeAttribute('src'); v.load(); } } catch (e) {} }
+
+// brilho: vídeos HDR/Dolby Vision ficam escuros fora do modo HDR do Windows — compensa no próprio player (lembra por vídeo)
+const VP_BRI = [1, 1.2, 1.4, 1.6, 1.8];
+function vpBri(d) {
+  if (d) { const i = VP_BRI.findIndex(x => Math.abs(x - VP.bri) < .01); VP.bri = VP_BRI[(i + 1) % VP_BRI.length]; try { localStorage.setItem('vbri|' + coverKey(VP.g), VP.bri); } catch (e) {} vpOsd('Brilho ' + Math.round(VP.bri * 100) + '%'); }
+  $('vpV').style.filter = VP.bri > 1 ? `brightness(${VP.bri}) contrast(${(1 + (VP.bri - 1) * .25).toFixed(2)}) saturate(${(1 + (VP.bri - 1) * .3).toFixed(2)})` : '';
+  $('vpBri').querySelector('span').textContent = Math.round(VP.bri * 100) + '%';
+}
