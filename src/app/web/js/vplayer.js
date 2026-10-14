@@ -56,12 +56,12 @@ function vpEl() {
   el.querySelector('.vpframe').addEventListener('contextmenu', e => { if (e.target.closest('.vpbar, .vptop')) return; e.preventDefault(); vpCtx(e.clientX, e.clientY); });
   document.addEventListener('mousedown', e => { if (!VP.open) return; const inCtx = e.target.closest('.vpctx'); document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => { if (m.classList.contains('vpctx')) { if (!inCtx) m.classList.remove('on'); } else if (!m.contains(e.target) && !(m.parentNode && m.parentNode.contains(e.target))) m.classList.remove('on'); }); }, true);
   el.addEventListener('wheel', e => { if (e.target.closest('.vpmenu, #vpCtx')) return; e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
-  window.addEventListener('resize', () => { if (VP.open) { vpLayout(); vpMpvRect(); } });
+  window.addEventListener('resize', () => { if (VP.open) { vpLayout(); } });
   return el;
 }
 async function openVPlayer(g) {
   const el = vpEl(), v = $('vpV'), s = sysOf(g) || {};
-  vpPrevStop(); vpMpvStop(); VP.open = true; VP.g = g; VP.s = s; VP.sub = -1; VP.aspect = Math.max(0, VP_ASPECTS.findIndex(a => a[0] === (s.aspect || 'auto')));
+  vpPrevStop(); VP.open = true; VP.g = g; VP.s = s; VP.sub = -1; VP.aspect = Math.max(0, VP_ASPECTS.findIndex(a => a[0] === (s.aspect || 'auto')));
   $('vpTitle').textContent = dn(g); $('vpMsg').textContent = ''; el.classList.remove('fail');
   try { v.volume = +(localStorage.getItem('vpvol') || 1); v.muted = !!localStorage.getItem('vpmute'); } catch (e) {}
   vpSubStyle(s);
@@ -105,7 +105,7 @@ function vpFail() {
 function vpClose() {
   if (!VP.open) return; const v = VPV();
   if (v.currentTime > 5 && v.duration && v.currentTime < v.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v.currentTime); } catch (e) {}
-  vpTxStop(); vpMpvStop(); { const r = $('vpV'); r.pause(); r.removeAttribute('src'); r.load(); } clearInterval(VP.saveT);
+  vpTxStop(); { const r = $('vpV'); r.pause(); r.removeAttribute('src'); r.load(); } clearInterval(VP.saveT);
   VP.open = false; $('vplayer').classList.remove('on');
   if (host && document.body.classList.contains('vpfull')) { document.body.classList.remove('vpfull'); host.postMessage('fs'); }
   sfx('back');
@@ -375,7 +375,6 @@ async function vpTxStart(k) {
 
 // o vídeo é sempre o do player da página; o som que ele não toca vem do mpv (ver vpTxStart)
 const VPV = () => $('vpV'); const VPM = null;
-function vpMpvStop() {} function vpMpvRect() {}
 
 // menu do botão direito no vídeo: Proporção / Áudio / Legenda abrem um submenu ao lado; abrir no Explorador
 function vpCtx(x, y) {

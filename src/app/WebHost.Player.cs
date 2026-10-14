@@ -133,21 +133,6 @@ mp.register_script_message('koru-aspect', function(d) ai = (ai - 1 + tonumber(d)
 mp.register_event('file-loaded', function() aspect(false) end)
 mp.observe_property('fullscreen', 'bool', function(_, v) if v then mp.set_property_bool('fullscreen', false); mp.commandv('script-message', 'koru-fs') end end)
 ";
-    // modo "player do Koru": o mouse sobre o vídeo avisa a página; teclado e controle ficam com a página
-    const string RemoteConf = @"MBTN_LEFT script-message koru-click
-MBTN_LEFT_DBL script-message koru-dbl
-WHEEL_UP script-message koru-wheel 1
-WHEEL_DOWN script-message koru-wheel -1
-Ctrl+WHEEL_UP script-message koru-zoom 1
-Ctrl+WHEEL_DOWN script-message koru-zoom -1
-MOUSE_MOVE script-message koru-move
-";
-    // posição do vídeo (a página manda o retângulo livre; acima/abaixo ficam os controles do Koru)
-    public static void MpvRect(int x, int y, int w, int h)
-    {
-        try { form.BeginInvoke((Action)(() => { if (mpvHost == null || !mpvRemote) return; if (w < 2 || h < 2) { mpvHost.Visible = false; return; } mpvHost.Bounds = new Rectangle(x, y, w, h); mpvHost.Visible = true; mpvHost.BringToFront(); })); } catch { }
-    }
-    public static void MpvStop() { try { form.BeginInvoke((Action)(() => Stop())); } catch { } }
     const string MpvConf = @"vo=gpu-next
 gpu-api=d3d11
 hwdec=auto-safe
@@ -168,7 +153,7 @@ input-default-bindings=yes
 ";
 
     // ---------- arquivo de vídeo para o player/prévia da página (com "Range": só lê o pedaço pedido, sem carregar o arquivo) ----------
-    // todo processo de som/vídeo (mpv, FFmpeg, miniaturas) fica "preso" ao Koru: se o Koru fechar ou cair, o Windows encerra junto
+    // todo processo de som/vídeo (mpv, miniaturas) fica "preso" ao Koru: se o Koru fechar ou cair, o Windows encerra junto
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr a, string n);
     [DllImport("kernel32.dll")] static extern bool SetInformationJobObject(IntPtr job, int cls, byte[] info, int len);
     [DllImport("kernel32.dll")] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr proc);
@@ -263,10 +248,8 @@ input-default-bindings=yes
     static string Q(string s) { return "\"" + (s ?? "").Replace("\"", "") + "\""; }
     static string Opt(Dictionary<string, object> c, string k, string def) { object v; return c != null && c.TryGetValue(k, out v) && v != null && v.ToString() != "" ? v.ToString() : def; }
 
-    static bool mpvRemote;
     public static string Play(string file, Dictionary<string, object> c)
     {
-        mpvRemote = Opt(c, "embed", "") == "1";
         string exe = MpvExe(); if (exe == null) return "O motor de vídeo ainda não foi baixado.";
         string conf = Path.Combine(MpvDir, "conf"); Directory.CreateDirectory(Path.Combine(conf, "scripts"));
         File.WriteAllText(Path.Combine(conf, "mpv.conf"), MpvConf);
@@ -287,23 +270,22 @@ input-default-bindings=yes
         };
         if (Opt(c, "aid", "") != "") a.Add("--aid=" + Opt(c, "aid", ""));
         if (Opt(c, "start", "") != "") a.Add("--start=" + Opt(c, "start", ""));
-        if (mpvRemote) { a.Add("--osc=no"); a.Add("--keep-open=yes"); a.Add("--input-default-bindings=no"); a.Add("--input-conf=" + Q(Path.Combine(conf, "remote.conf"))); a.Add("--osd-level=1"); a.Add("--save-position-on-quit=no"); File.WriteAllText(Path.Combine(conf, "remote.conf"), RemoteConf); }
         bool full = Opt(c, "videoFull", "false") == "True";
         form.Invoke((Action)(() =>
         {
             Stop();
-            mpvHost = new Panel { Dock = mpvRemote ? DockStyle.None : DockStyle.Fill, BackColor = Color.Black, Visible = !mpvRemote };
+            mpvHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
             form.Controls.Add(mpvHost); mpvHost.BringToFront();
             a.Insert(0, "--wid=" + mpvHost.Handle.ToInt64());
             a.Add("--"); a.Add(Q(file));
-            if (full && !mpvRemote && !form.Full) { form.ToggleFull(); mpvFull = true; } else mpvFull = false;
+            if (full && !form.Full) { form.ToggleFull(); mpvFull = true; } else mpvFull = false;
             var psi = new ProcessStartInfo(exe, string.Join(" ", a)) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) };
             mpvFile = file; MpvLog("play: " + exe + " " + psi.Arguments);
             mpvProc = Process.Start(psi); Tie(mpvProc); mpvProc.EnableRaisingEvents = true;
             var me = mpvProc; me.Exited += (s, e) => { try { form.BeginInvoke((Action)(() => { if (mpvProc == me) Stop(); })); } catch { } };
-            if (!mpvRemote) { GameOn = true; Post("game:on"); }
+            GameOn = true; Post("game:on");
             new Thread(() => PipeLoop(me)) { IsBackground = true }.Start();
-            if (!mpvRemote) new Thread(() => { for (int i = 0; i < 40 && mpvProc == me; i++) { Thread.Sleep(100); if (FocusMpv()) break; } }) { IsBackground = true }.Start();
+            new Thread(() => { for (int i = 0; i < 40 && mpvProc == me; i++) { Thread.Sleep(100); if (FocusMpv()) break; } }) { IsBackground = true }.Start();
         }));
         return null;
     }
@@ -332,7 +314,7 @@ input-default-bindings=yes
         try { if (mpvPipe != null) mpvPipe.Dispose(); } catch { } mpvPipe = null; mpvOut = null;
         if (mpvHost != null) { form.Controls.Remove(mpvHost); mpvHost.Dispose(); mpvHost = null; }
         if (mpvFull && form.Full) form.ToggleFull(); mpvFull = false;
-        if (p != null) { if (!mpvRemote) { GameOn = false; Post("game:off"); } else Post("mpv:{\"event\":\"koru-exit\"}"); try { view.Focus(); } catch { } }
+        if (p != null) { GameOn = false; Post("game:off"); try { view.Focus(); } catch { } }
     }
     static void PipeLoop(Process me)
     {
@@ -343,16 +325,11 @@ input-default-bindings=yes
             catch { Thread.Sleep(100); }
         }
         if (mpvPipe == null) return;
-        if (mpvRemote)
-        {   // player do Koru controlando o mpv: acompanha o estado para a interface da página
-            int n = 1; foreach (var prop in new[] { "pause", "time-pos", "duration", "volume", "mute", "track-list", "eof-reached", "aid", "sid", "width", "height", "demuxer-cache-time" }) MpvCmd("observe_property", n++, prop);
-        }
         try
         {
             var rd = new StreamReader(mpvPipe, Encoding.UTF8); string line;
             while (mpvProc == me && (line = rd.ReadLine()) != null)
             {
-                if (mpvRemote) { if (line.Contains("\"property-change\"") || line.Contains("\"client-message\"") || line.Contains("\"end-file\"") || line.Contains("\"file-loaded\"")) Post("mpv:" + line); if (line.Contains("koru-click")) { try { form.BeginInvoke((Action)(() => { try { view.Focus(); } catch { } })); } catch { } } continue; }
                 if (line.Contains("\"client-message\"") && line.Contains("koru-fs")) form.BeginInvoke((Action)(() => { form.ToggleFull(); mpvFull = false; FocusPlayer(); }));
             }
         }

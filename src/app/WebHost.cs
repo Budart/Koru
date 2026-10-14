@@ -371,9 +371,6 @@ static partial class WebHost
 
     static void OnMessage(string msg)
     {
-        if (msg != null && msg.StartsWith("mpvrect:")) { var v = msg.Substring(8).Split(','); int x, y, w, h; if (v.Length == 4 && int.TryParse(v[0], out x) && int.TryParse(v[1], out y) && int.TryParse(v[2], out w) && int.TryParse(v[3], out h)) MpvRect(x, y, w, h); return; }
-        if (msg != null && msg.StartsWith("mpvcmd:")) { try { var arr = (object[])new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(msg.Substring(7)); MpvCmd(arr); } catch { } return; }
-        if (msg == "mpvstop") { MpvStop(); return; }
         if (msg != null && msg.StartsWith("artres:")) { ToMini(msg); return; }
         switch (msg)
         {
