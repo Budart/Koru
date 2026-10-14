@@ -860,3 +860,5 @@ body.crt .trt { display:none; } body.crt .trbtn { padding-right:8px; }
 #vplayer.win .vpframe { inset:5% 7%; border-radius:16px; box-shadow:0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08); }
 #vplayer.win .vptop .vptitle { font-size:16px; }
 body.vprevon #vidBox { opacity:0 !important; pointer-events:none; }
+#privTip { position:fixed; top:18px; left:50%; z-index:900; display:flex; align-items:center; gap:8px; padding:9px 18px 9px 14px; border-radius:22px; background:rgba(20,22,28,.94); color:#f1ece3; font:600 15px "Poppins",sans-serif; box-shadow:0 8px 24px rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.1); transform:translate(-50%,-140%); opacity:0; transition:transform .35s cubic-bezier(.3,1.4,.5,1), opacity .25s; pointer-events:none; }
+#privTip.on { transform:translate(-50%,0); opacity:1; } #privTip svg { width:20px; height:20px; fill:#3D7BFF; color:#3D7BFF; }

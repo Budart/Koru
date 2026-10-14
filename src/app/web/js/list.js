@@ -327,9 +327,9 @@ function makeGroups(match, noFav) {
   const vis = match.filter(g => !hidden.has(coverKey(g)) && (noFav || !isFavG(g))).sort(sorter);
   const hid = match.filter(g => hidden.has(coverKey(g))).sort(sortCmp);
   const groups = [];
+  if (priv.length) groups.push({ cat: '__priv', label: '🔓 Ocultos', items: priv });   // pasta privada revelada: sempre no topo
   if (favs.length) groups.push({ cat: '__fav', label: '⭐ Favoritos', items: favs, fav: true });
   vis.forEach(g => { const c = ecat(g); let gr = groups[groups.length - 1]; if (!gr || gr.cat !== c || gr.fav) groups.push(gr = { cat: c, label: catLabel(c), items: [] }); gr.items.push(g); });
-  if (priv.length) groups.push({ cat: '__priv', label: '🔒 Ocultos', items: priv });
   if (hid.length) groups.push({ cat: '__hidden', label: 'Ocultos', items: hid, hid: true });
   return { groups, nvis: favs.length + vis.length, grouped: vis.some(g => ecat(g)) || hid.length > 0 || favs.length > 0 };
 }

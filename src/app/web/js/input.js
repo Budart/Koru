@@ -334,4 +334,11 @@ function togglePriv() {
   if (screen !== 'games' || !sys || sys.type !== 'video' || globalMode) return;
   if (!games.some(g => g.priv)) return;
   privOn = !privOn; sfx('tick'); refilterKeep();
+  privToast(privOn);
+}
+
+function privToast(on) {
+  let t = $('privTip'); if (!t) { t = document.createElement('div'); t.id = 'privTip'; document.body.appendChild(t); }
+  t.innerHTML = on ? '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Ocultos' : '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>Ocultos';
+  t.classList.add('on'); clearTimeout(privToast.t); privToast.t = setTimeout(() => t.classList.remove('on'), 1800);
 }

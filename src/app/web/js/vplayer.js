@@ -34,7 +34,7 @@ function vpEl() {
       <button class="vpb wide" data-a="asp" id="vpAsp" title="Proporção (Ctrl+scroll)">${VP_ICO.asp}<span>Original</span></button>
       <button class="vpb wide" data-a="bri" id="vpBri" title="Brilho (B) — vídeos HDR costumam ficar escuros">${VP_ICO.bri}<span>100%</span></button>
       <button class="vpb wide" data-a="hq" title="Abrir no player avançado (upscaling, todos os formatos)">${VP_ICO.hq}<span>Upscaling</span></button>
-      <button class="vpb" data-a="max" id="vpMax" title="Ocupar a janela toda (W)">${VP_ICO.max}</button><button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
+      <button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
     </div></div></div>`;
   document.body.appendChild(el);
   const v = $('vpV');
@@ -52,7 +52,6 @@ function vpEl() {
   sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { v.currentTime = t; vpPaint(); } };
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
-  el.addEventListener('mousedown', e => { if (e.target === el && el.classList.contains('win')) vpClose(); });
   el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpAspect(e.deltaY < 0 ? 1 : -1); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
   window.addEventListener('resize', () => { if (VP.open) vpLayout(); });
   return el;
@@ -68,7 +67,7 @@ async function openVPlayer(g) {
   let pos = 0; try { pos = +(localStorage.getItem('vpos|' + coverKey(g)) || 0); } catch (e) {}
   v.onloadeddata = () => { if (pos > 5 && v.duration && pos < v.duration - 10) v.currentTime = pos; v.onloadeddata = null; };
   { let b0 = 0; try { b0 = +(localStorage.getItem('vbri|' + coverKey(g)) || 0); } catch (e) {} VP.bri = b0 || (/\b(hdr|hdr10|dv|dovi|dolby.?vision)\b/i.test(g.name || g.path) ? 1.4 : 1); vpBri(0); }
-  el.classList.add('on'); if (!el.classList.contains('max')) el.classList.add('win'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
+  el.classList.add('on'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
   // legendas externas (.srt / .vtt com o mesmo nome do vídeo)
@@ -155,10 +154,10 @@ function vpInput(a) {
     return;
   }
   ({ ok: () => vpAct('play'), back: () => vpClose(), left: () => vpSeek(-10), right: () => vpSeek(10), up: () => vpVolume(.05), down: () => vpVolume(-.05),
-     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('max'), select: () => vpAct('mute'), search: () => vpAct('next') }[a] || (() => {}))();
+     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next') }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri', u: 'hq', U: 'hq', n: 'next', N: 'next', w: 'max', W: 'max', Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri', u: 'hq', U: 'hq', n: 'next', N: 'next', Escape: 'close', Backspace: 'close' };
   e.preventDefault();
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
   if (k === 'PageUp') return vpSeek(-60); if (k === 'PageDown') return vpSeek(60);
