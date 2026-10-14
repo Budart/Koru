@@ -132,7 +132,7 @@ function vpSubStyle(s) {
 }
 async function vpAct(a) {
   const v = $('vpV'); vpShow();
-  if (a === 'play') { if (v.paused) v.play().catch(() => {}); else v.pause(); }
+  if (a === 'play') { if (v.paused) v.play().catch(() => {}); else v.pause(); vpFlash(v.paused ? 'pause' : 'play'); }
   else if (a === 'back') vpSeek(-10); else if (a === 'fwd') vpSeek(10);
   else if (a === 'mute') { v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = .5; }
   else if (a === 'sub') $('vpSubs').classList.toggle('on');
@@ -217,3 +217,9 @@ function vpZoom(f, e) {
   document.addEventListener('pointermove', e => { if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; VP.zx = d.zx + dx; VP.zy = d.zy + dy; vpZoomApply(); });
   document.addEventListener('pointerup', e => { if (d && d.moved) { const v = $('vpV'); const st = e => { e.stopPropagation(); v.removeEventListener('click', st, true); }; v.addEventListener('click', st, true); } d = null; }); })();
 
+
+// ícone de play/pause no centro ao pausar/retomar (some em 0,5 s)
+function vpFlash(k) {
+  let f = $('vpFlash'); if (!f) { f = document.createElement('div'); f.id = 'vpFlash'; $('vplayer').querySelector('.vpframe').appendChild(f); }
+  f.innerHTML = VP_ICO[k]; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+}
