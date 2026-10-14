@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
-// Koru — player de vídeo embutido (mpv): toca qualquer formato, upscaling por GPU, legendas, proporção e controle
+// Koru — player de vídeo embutido (mpv): toca qualquer formato, legendas, proporção e controle
 static partial class WebHost
 {
     public static readonly string MpvDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CentralDeJogos", "mpv");
@@ -72,21 +72,6 @@ static partial class WebHost
                 if (Directory.Exists(MpvBin)) Directory.Delete(MpvBin, true);
                 ZipFile.ExtractToDirectory(zip, MpvBin);
                 if (MpvExe() == null) throw new Exception("mpv.exe não veio no pacote");
-                MpvStep = "Baixando os filtros de upscaling..."; MpvProgress = 88;
-                string sh = Path.Combine(MpvDir, "shaders"); Directory.CreateDirectory(sh);
-                var files = new[] {
-                    new[] { "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/main/portable_config/shaders/AMD/AMD_FSR1_EASU.glsl", "FSR.glsl" },
-                    new[] { "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/main/portable_config/shaders/AMD/AMD_CAS_AIO_RT.glsl", "CAS.glsl" },
-                    new[] { "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/main/portable_config/shaders/NV/NVScaler_RT.glsl", "NIS.glsl" },
-                    new[] { "https://github.com/igv/FSRCNN-TensorFlow/releases/download/1.1/FSRCNNX_x2_8-0-4-1.glsl", "FSRCNNX.glsl" } };
-                foreach (var f in files) try { Fetch(f[0], Path.Combine(sh, f[1]), null); } catch { }
-                try
-                {
-                    string az = Path.Combine(tmp, "a4k.zip"); Fetch("https://github.com/bloc97/Anime4K/releases/download/v4.0.1/Anime4K_v4.0.zip", az, null);
-                    using (var z = ZipFile.OpenRead(az))
-                        foreach (var e in z.Entries) if (e.Name.StartsWith("Anime4K_") && e.Name.EndsWith(".glsl")) e.ExtractToFile(Path.Combine(sh, e.Name), true);
-                }
-                catch { }
                 MpvProgress = 100; MpvStep = "Pronto";
             }
             catch (Exception ex) { MpvError = ex.Message; MpvLog("ERRO: " + ex); }
@@ -117,8 +102,6 @@ Ctrl+WHEEL_UP script-message koru-aspect 1
 Ctrl+WHEEL_DOWN script-message koru-aspect -1
 Ctrl+UP script-message koru-aspect 1
 Ctrl+DOWN script-message koru-aspect -1
-u script-message koru-scale 1
-U script-message koru-scale -1
 s cycle sub
 S cycle sub down
 v cycle sub-visibility
@@ -131,14 +114,11 @@ i script-binding stats/display-stats-toggle
 TAB show-progress
 ";
     const string KoruLua = @"local mp = require 'mp'
-local o = { scale = 'off', aspect = 'auto', dir = '' }
+local o = { aspect = 'auto' }
 require('mp.options').read_options(o, 'koru')
 local A = { {'auto','Original'}, {'16:9','16:9'}, {'4:3','4:3'}, {'21:9','21:9 (ultrawide)'}, {'9:16','Vertical 9:16'}, {'1:1','Quadrado 1:1'}, {'fill','Preencher a tela (corta as bordas)'}, {'stretch','Esticar (tela cheia)'} }
-local S = { {'off','Upscaling desligado'}, {'fsr','AMD FSR'}, {'nis','NVIDIA NIS'}, {'cas','Nitidez (AMD CAS)'}, {'fsrcnnx','FSRCNNX (IA, filmes)'}, {'anime4k','Anime4K (anime)'}, {'rtx','NVIDIA RTX Video Super Resolution'}, {'intel','Intel Video Super Resolution'} }
 local function idx(t, k) for i, v in ipairs(t) do if v[1] == k then return i end end return 1 end
-local ai, si = idx(A, o.aspect), idx(S, o.scale)
-local function sh(f) return o.dir .. '/' .. f end
-local function exists(p) local f = io.open(p, 'r') if f then f:close() return true end return false end
+local ai = idx(A, o.aspect)
 local function aspect(show)
   local k = A[ai][1]
   mp.set_property('keepaspect', 'yes'); mp.set_property_number('panscan', 0); mp.set_property('video-aspect-override', '-1')
@@ -147,31 +127,8 @@ local function aspect(show)
   elseif k ~= 'auto' then mp.set_property('video-aspect-override', k) end
   if show then mp.osd_message('Proporção: ' .. A[ai][2], 2) end
 end
-local function scale(show)
-  local k = S[si][1]
-  mp.set_property('glsl-shaders', ''); mp.command('vf remove @koruvsr')
-  local list = {}
-  if k == 'fsr' then list = { sh('FSR.glsl'), sh('CAS.glsl') }
-  elseif k == 'nis' then list = { sh('NIS.glsl') }
-  elseif k == 'cas' then list = { sh('CAS.glsl') }
-  elseif k == 'fsrcnnx' then list = { sh('FSRCNNX.glsl') }
-  elseif k == 'anime4k' then list = { sh('Anime4K_Clamp_Highlights.glsl'), sh('Anime4K_Restore_CNN_M.glsl'), sh('Anime4K_Upscale_CNN_x2_M.glsl'), sh('Anime4K_AutoDownscalePre_x2.glsl'), sh('Anime4K_AutoDownscalePre_x4.glsl'), sh('Anime4K_Upscale_CNN_x2_S.glsl') }
-  elseif k == 'rtx' or k == 'intel' then
-    mp.set_property('hwdec', 'd3d11va')
-    mp.command('vf add @koruvsr:d3d11vpp=scaling-mode=' .. (k == 'rtx' and 'nvidia' or 'intel') .. ':scale=2')
-  end
-  local ok = {}
-  for _, p in ipairs(list) do if exists(p) then table.insert(ok, p) end end
-  if #ok > 0 then mp.set_property('glsl-shaders', table.concat(ok, ';')) end
-  if show then
-    local msg = S[si][2]
-    if #list > 0 and #ok == 0 then msg = msg .. ' (filtro não encontrado)' end
-    mp.osd_message(msg, 2)
-  end
-end
 mp.register_script_message('koru-aspect', function(d) ai = (ai - 1 + tonumber(d)) % #A + 1; aspect(true) end)
-mp.register_script_message('koru-scale', function(d) si = (si - 1 + tonumber(d)) % #S + 1; scale(true) end)
-mp.register_event('file-loaded', function() aspect(false); scale(false) end)
+mp.register_event('file-loaded', function() aspect(false) end)
 mp.observe_property('fullscreen', 'bool', function(_, v) if v then mp.set_property_bool('fullscreen', false); mp.commandv('script-message', 'koru-fs') end end)
 ";
     const string MpvConf = @"vo=gpu-next
@@ -282,7 +239,7 @@ input-default-bindings=yes
         var a = new List<string> {
             "--config-dir=" + Q(conf), "--watch-later-dir=" + Q(Path.Combine(MpvDir, "watch_later")),
             "--input-ipc-server=" + Q(@"\\.\pipe\koru-mpv-" + Process.GetCurrentProcess().Id),
-            "--script-opts=" + Q("koru-scale=" + Opt(c, "upscale", "off") + ",koru-aspect=" + Opt(c, "aspect", "auto") + ",koru-dir=" + Path.Combine(MpvDir, "shaders").Replace('\\', '/')),
+            "--script-opts=" + Q("koru-aspect=" + Opt(c, "aspect", "auto")),
             "--slang=" + Q(Opt(c, "subLang", "pt,por,pob,pt-BR,en,eng")),
             "--sub-font-size=" + Opt(c, "subSize", "46"), "--sub-pos=" + Opt(c, "subPos", "95"),
             "--sub-color=" + (col == "yellow" ? "#FFE14D" : col == "cyan" ? "#7FE7FF" : "#FFFFFF"),
@@ -372,7 +329,6 @@ input-default-bindings=yes
         if (down(0x0200)) MpvCmd("seek", 60);                             // RB
         if (down(0x0001)) MpvCmd("add", "volume", 5);                     // ↑
         if (down(0x0002)) MpvCmd("add", "volume", -5);                    // ↓
-        if (down(0x0020)) MpvCmd("script-message", "koru-scale", "1");    // Back/Select: upscaling
         if (down(0x0010)) form.BeginInvoke((Action)(() => { form.ToggleFull(); mpvFull = false; FocusPlayer(); }));   // Start: tela cheia
         if (down(0x0040)) MpvCmd("cycle", "sub-visibility");              // L3
         if (down(0x0080)) MpvCmd("show-progress");                        // R3

@@ -81,7 +81,7 @@ static partial class Central
     static Dictionary<string, object> VideoConsole(string dir)
     {
         return new Dictionary<string, object> { { "id", "videos" }, { "type", "video" }, { "name", "Filmes e vídeos" }, { "art", "" }, { "thumbs", "" }, { "emulator", "" }, { "args", "" },
-            { "romDirs", new[] { dir } }, { "extensions", VideoExt }, { "upscale", "off" }, { "aspect", "auto" }, { "videoFull", true }, { "subOn", true }, { "subLang", "pt,por,pob,pt-BR,en,eng" }, { "subSize", "46" }, { "subColor", "white" }, { "subBg", "outline" }, { "subPos", "95" } };
+            { "romDirs", new[] { dir } }, { "extensions", VideoExt }, { "aspect", "auto" }, { "videoFull", true }, { "subOn", true }, { "subLang", "pt,por,pob,pt-BR,en,eng" }, { "subSize", "46" }, { "subColor", "white" }, { "subBg", "outline" }, { "subPos", "95" } };
     }
     static string Rel(string root, string full)
     {

@@ -174,9 +174,9 @@ static partial class Central
                     {   // vídeos: categoria = 1ª subpasta; pasta privada só aparece quando o usuário revela
                         string rel = f.DirectoryName.Length > dir.TrimEnd('\\').Length ? f.DirectoryName.Substring(dir.TrimEnd('\\').Length).Trim('\\') : "";
                         bool priv = L(c, "privateDirs").Any(x => !string.IsNullOrWhiteSpace(x) && Full(root, x).TrimEnd('\\').Equals(dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-                        // subcategoria dos vídeos: pela duração (Filmes ≥ 1 h, Vídeos < 1 h); com mais de uma pasta principal, o nome dela vem antes
+                        // subcategoria dos vídeos: só pela duração (Filmes ≥ 1 h, Vídeos < 1 h), juntando todas as pastas
                         double secs = VideoSeconds(f); bool movie = secs > 0 ? secs >= 3600 : f.Length >= 700L * 1024 * 1024;
-                        string kind = movie ? "Filmes" : "Vídeos", mainDirs = dirs.Count(x => !string.IsNullOrWhiteSpace(x) && !L(c, "privateDirs").Contains(x)) > 1 ? new DirectoryInfo(dir).Name + " · " : "";
+                        string kind = movie ? "Filmes" : "Vídeos", mainDirs = "";
                         var vg = new Dictionary<string, object> { { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds }, { "cat", mainDirs + kind } };
                         if (secs > 0) vg["secs"] = (long)secs;
                         if (priv) vg["priv"] = true;

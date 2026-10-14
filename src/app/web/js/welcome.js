@@ -21,7 +21,7 @@ function runWelcome() {
     const steps = [
       { k: 'root', n: 'Passo 1 de 4', t: 'Onde estão seus emuladores?', p: 'Escolha a pasta principal onde ficam os emuladores e as ROMs (uma subpasta por console). O Koru encontra tudo sozinho.', skip: false },
       { k: 'pc', n: 'Passo 2 de 4', t: 'E os seus jogos de PC?', p: 'Marque a Steam para usar a pasta padrão dos atalhos dela (dá para trocar). Para outras lojas ou pastas, use "Outra pasta...". Se não quiser, é só pular.', skip: true },
-      { k: 'video', n: 'Passo 3 de 4 · opcional', t: 'Quer ver filmes e vídeos também?', p: 'Escolha a pasta dos seus filmes, séries ou vídeos. Eles tocam no próprio Koru, em qualquer formato, com legendas e upscaling. Se não quiser, é só pular.', skip: true },
+      { k: 'video', n: 'Passo 3 de 4 · opcional', t: 'Quer ver filmes e vídeos também?', p: 'Escolha a pasta dos seus filmes, séries ou vídeos. Eles tocam no próprio Koru, em qualquer formato, com legendas. Se não quiser, é só pular.', skip: true },
       { k: 'sgdbKey', n: 'Passo 4 de 4 · opcional', t: 'Opcional: quer ainda mais opções de capas?', key: true, skip: true },
     ];
     const upd = () => { const s = steps[st]; if (!s.key) $('wNext').disabled = !picks[s.k] && !(s.k === 'pc' && picks.pcDirs.length) && !s.skip; };

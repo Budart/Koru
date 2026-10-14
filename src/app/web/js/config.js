@@ -23,7 +23,6 @@ let cfSec = 'geral';
 // créditos e licenças (as imagens do tema carbon são CC BY-NC-SA: exigem atribuição)
 const CREDITS = [
   ['mpv', 'mpv-player', 'Player de vídeo usado em Filmes e vídeos (baixado do site oficial na primeira vez).', [['mpv.io', 'https://mpv.io']]],
-  ['Filtros de upscaling', 'Anime4K (bloc97) · FSRCNNX (igv) · AMD FSR/CAS e NVIDIA NIS (versões GLSL de hooke007)', 'Upscaling e nitidez por GPU no player.', [['Anime4K', 'https://github.com/bloc97/Anime4K'], ['FSRCNNX', 'https://github.com/igv/FSRCNN-TensorFlow'], ['mpv_PlayKit', 'https://github.com/hooke007/mpv_PlayKit']]],
   ['Tema "carbon" para EmulationStation', 'Rookervik — baseado no tema "simple" de Nils Bonenberger', 'Logos, fundos e desenhos de controle dos consoles. Licença CC BY-NC-SA (atribuição, uso não comercial, compartilha igual). As imagens são exibidas sem alteração de conteúdo (apenas redimensionadas/recortadas na tela).', [['Repositório (fabricecaruso)', 'https://github.com/fabricecaruso/es-theme-carbon'], ['Repositório (RetroPie, reserva)', 'https://github.com/RetroPie/es-theme-carbon'], ['Licença CC BY-NC-SA', 'https://creativecommons.org/licenses/by-nc-sa/4.0/deed.pt_BR']]],
   ['libretro-thumbnails', 'Projeto libretro / RetroArch e colaboradores', 'Capas, telas e títulos de jogos.', [['Repositório', 'https://github.com/libretro-thumbnails/libretro-thumbnails']]],
   ['SteamGridDB', 'Comunidade SteamGridDB', 'Capas, fundos e logos (opcional, com a sua chave da API).', [['Site', 'https://www.steamgriddb.com/']]],
@@ -224,8 +223,7 @@ function pcStoreMigrate(c) {   // pasta padrão de loja que estava na lista comu
 }
 /* ---------- card de Filmes e vídeos ---------- */
 const VIDEO_EXT = ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'm4v', 'webm', 'flv', 'ts', 'm2ts', 'mts', 'mpg', 'mpeg', 'vob', 'ogv', '3gp', 'rmvb', 'divx', 'iso'];
-const VIDEO_DEF = { type: 'video', art: '', thumbs: '', emulator: '', args: '', romDirs: [], privateDirs: [], extensions: VIDEO_EXT, upscale: 'off', aspect: 'auto', videoFull: true, subOn: true, subLang: 'pt,por,pob,pt-BR,en,eng', subSize: '46', subColor: 'white', subBg: 'outline', subPos: '95' };
-const UPSCALE = [['off', 'Desligado'], ['fsr', 'AMD FSR (leve, qualquer placa)'], ['nis', 'NVIDIA NIS (leve, qualquer placa)'], ['cas', 'Só nitidez (AMD CAS)'], ['fsrcnnx', 'FSRCNNX — IA, ideal para filmes'], ['anime4k', 'Anime4K — ideal para anime'], ['rtx', 'NVIDIA RTX Video Super Resolution (RTX)'], ['intel', 'Intel Video Super Resolution']];
+const VIDEO_DEF = { type: 'video', art: '', thumbs: '', emulator: '', args: '', romDirs: [], privateDirs: [], extensions: VIDEO_EXT, aspect: 'auto', videoFull: true, subOn: true, subLang: 'pt,por,pob,pt-BR,en,eng', subSize: '46', subColor: 'white', subBg: 'outline', subPos: '95' };
 const ASPECTS_V = [['auto', 'Original'], ['16:9', '16:9'], ['4:3', '4:3'], ['21:9', '21:9 (ultrawide)'], ['9:16', 'Vertical 9:16'], ['1:1', 'Quadrado 1:1'], ['fill', 'Preencher a tela (corta as bordas)'], ['stretch', 'Esticar (tela cheia)']];
 function vSel(i, k, list, v) { return `<select data-vk="${i}|${k}">${list.map(([a, b]) => `<option value="${a}"${String(v) === a ? ' selected' : ''}>${b}</option>`).join('')}</select>`; }
 function videoCardHtml(i, c) {
@@ -233,7 +231,6 @@ function videoCardHtml(i, c) {
   return `<div class="msg">🎬 Filmes e vídeos — tocam no player do Koru, em qualquer formato (MKV, MP4, AVI, HEVC, AV1, DTS, legendas…).</div>
   <div class="fld vplayer"><label>Player (mpv)</label><div class="line"><span class="msg" id="vMpv${i}">verificando…</span><button class="btn sec sm" data-vmpv="${i}">Baixar / atualizar</button></div></div>
   <div class="fld vgrid">
-    <div><label>Upscaling padrão</label>${vSel(i, 'upscale', UPSCALE, c.upscale)}</div>
     <div><label>Proporção padrão</label>${vSel(i, 'aspect', ASPECTS_V, c.aspect)}</div>
   </div>
   <div class="fld"><label class="chk2"><input type="checkbox" data-vk="${i}|videoFull" ${c.videoFull !== false ? 'checked' : ''}> Abrir os vídeos em tela cheia</label></div>
@@ -248,7 +245,7 @@ function videoCardHtml(i, c) {
     </div>
     <div class="msg">Legendas .srt / .ass com o mesmo nome do vídeo são carregadas sozinhas.</div>
   </div>
-  <div class="msg vkeys"><b>No vídeo:</b> Espaço/A pausa · ← →/D-pad ±10 s · PgUp PgDn/LB RB ±1 min · ↑ ↓ volume · S/X legenda · A/Y áudio · Ctrl+scroll/LT RT proporção · U/Select upscaling · F/Start/duplo clique tela cheia · Esc/B sair</div>`;
+  <div class="msg vkeys"><b>No vídeo:</b> Espaço/A pausa · ← →/D-pad ±10 s · PgUp PgDn/LB RB ±1 min · ↑ ↓ volume · S/X legenda · A/Y áudio · Ctrl+scroll/LT RT proporção · F/Start/duplo clique tela cheia · Esc/B sair</div>`;
 }
 function videoPrivHtml(i, c) {
   if (!c.privateDirs) c.privateDirs = [];

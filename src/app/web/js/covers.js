@@ -200,7 +200,7 @@ async function mpvReady(interactive) {
   let st; try { st = await api('/api/mpv'); } catch (e) { return false; }
   if (st.installed && !st.busy) return true;
   if (!st.busy) {
-    if (!interactive || !await ask('Baixar o player de vídeo?', 'Para tocar filmes e vídeos de qualquer formato, o Koru usa o <b>mpv</b> (gratuito e de código aberto). Ele é baixado uma vez só do site oficial, junto com os filtros de upscaling (cerca de 40 MB).', 'Baixar agora')) return false;
+    if (!interactive || !await ask('Baixar o player de vídeo?', 'Para tocar filmes e vídeos de qualquer formato, o Koru usa o <b>mpv</b> (gratuito e de código aberto). Ele é baixado uma vez só do site oficial (cerca de 40 MB).', 'Baixar agora')) return false;
     try { st = await api('/api/mpv', { method:'POST' }); } catch (e) { toast(e.message, true); return false; }
   }
   while (true) {
