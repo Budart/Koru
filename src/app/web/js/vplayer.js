@@ -54,7 +54,7 @@ function vpEl() {
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
   el.querySelector('.vpframe').addEventListener('contextmenu', e => { if (e.target.closest('.vpbar, .vptop')) return; e.preventDefault(); vpCtx(e.clientX, e.clientY); });
-  document.addEventListener('mousedown', e => { if (!VP.open) return; document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => { if (!m.contains(e.target) && !(m.parentNode && m.parentNode.contains(e.target) && m.id !== 'vpCtx')) m.classList.remove('on'); }); }, true);
+  document.addEventListener('mousedown', e => { if (!VP.open) return; const inCtx = e.target.closest('.vpctx'); document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => { if (m.classList.contains('vpctx')) { if (!inCtx) m.classList.remove('on'); } else if (!m.contains(e.target) && !(m.parentNode && m.parentNode.contains(e.target))) m.classList.remove('on'); }); }, true);
   el.addEventListener('wheel', e => { if (e.target.closest('.vpmenu, #vpCtx')) return; e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
   window.addEventListener('resize', () => { if (VP.open) { vpLayout(); vpMpvRect(); } });
   return el;
@@ -376,25 +376,44 @@ async function vpTxStart(k) {
 const VPV = () => $('vpV'); const VPM = null;
 function vpMpvStop() {} function vpMpvRect() {}
 
-// menu do botão direito no vídeo: proporção, áudio, legenda e abrir no Explorador
+// menu do botão direito no vídeo: Proporção / Áudio / Legenda abrem um submenu ao lado; abrir no Explorador
 function vpCtx(x, y) {
   document.querySelectorAll('#vplayer .vpmenu.on').forEach(m => m.classList.remove('on'));
-  let c = $('vpCtx'); if (!c) { c = document.createElement('div'); c.id = 'vpCtx'; c.className = 'vpmenu'; $('vplayer').appendChild(c); }
-  const sec = (t, html) => `<div class="vpmh">${t}</div>${html}`;
-  c.innerHTML =
-    sec('Proporção', VP_ASPECTS.map((a, i) => vpMi('a' + i, VP.aspect === i, a[1], '')).join('')) +
-    (VP.auds.length ? sec('Áudio', VP.auds.map((a, i) => vpMi('u' + i, VP.aud === i, esc(a.name), esc(a.codec))).join('')) : '') +
-    sec('Legenda', vpMi('s-1', VP.sub < 0, 'Desligadas', '') + VP.subs.map((t, i) => vpMi('s' + i, VP.sub === i, esc(t.name), t.emb != null ? 'No vídeo' : t.path ? 'Arquivo escolhido' : 'Arquivo ao lado', t.text === false)).join('') + '<div class="vpmi vpick" data-k="pick"><i class="ck">＋</i><span class="t"><b>Escolher arquivo de legenda…</b></span></div>') +
-    '<div class="vpsep"></div><div class="vpmi" data-k="reveal"><i class="ck">📂</i><span class="t"><b>Abrir no Explorador de Arquivos</b></span></div>';
-  c.querySelectorAll('[data-k]').forEach(it => it.onclick = ev => {
-    ev.stopPropagation(); c.classList.remove('on'); const k = it.dataset.k;
-    if (k === 'pick') vpPickSub();
-    else if (k === 'reveal') { const g = VP.g; if (document.body.classList.contains('vpfull')) vpAct('full'); api('/api/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: g.path }) }).catch(er => toast(er.message, true)); }
-    else if (k[0] === 'a') { VP.aspect = +k.slice(1); vpAspect(0); vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
-    else if (k[0] === 'u') vpSetAud(+k.slice(1), true);
-    else if (k[0] === 's') vpSetSub(+k.slice(1));
+  let c = $('vpCtx'), sub = $('vpCtxSub');
+  if (!c) { c = document.createElement('div'); c.id = 'vpCtx'; c.className = 'vpmenu vpctx'; sub = document.createElement('div'); sub.id = 'vpCtxSub'; sub.className = 'vpmenu vpctx'; $('vplayer').append(c, sub); }
+  const cur = { asp: VP_ASPECTS[VP.aspect][1], aud: VP.auds[VP.aud] ? VP.auds[VP.aud].name : '—', sub: VP.sub >= 0 && VP.subs[VP.sub] ? VP.subs[VP.sub].name : 'Desligadas' };
+  const row = (k, ico, label, val, more) => `<div class="vpcr" data-k="${k}"><i class="ic">${ico}</i><span class="lb">${label}</span><span class="vl">${esc(val)}</span>${more ? '<i class="ar">›</i>' : ''}</div>`;
+  c.innerHTML = `<div class="vpch">${esc(dn(VP.g))}</div>` +
+    row('asp', VP_ICO.asp, 'Proporção', cur.asp, 1) +
+    (VP.auds.length ? row('aud', VP_ICO.aud, 'Áudio', cur.aud, 1) : '') +
+    row('sub', VP_ICO.sub, 'Legenda', cur.sub, 1) +
+    '<div class="vpsep"></div>' +
+    row('reveal', '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>', 'Abrir no Explorador', '', 0);
+  const openSub = (kind, rowEl) => {
+    c.querySelectorAll('.vpcr').forEach(r => r.classList.toggle('hot', r === rowEl));
+    let html = '';
+    if (kind === 'asp') html = '<div class="vpmh">Proporção</div>' + VP_ASPECTS.map((a, i) => vpMi('a' + i, VP.aspect === i, a[1], '')).join('');
+    else if (kind === 'aud') html = '<div class="vpmh">Áudio</div>' + VP.auds.map((a, i) => vpMi('u' + i, VP.aud === i, esc(a.name), esc(a.codec))).join('');
+    else if (kind === 'sub') html = '<div class="vpmh">Legenda</div>' + vpMi('s-1', VP.sub < 0, 'Desligadas', '') + VP.subs.map((t, i) => vpMi('s' + i, VP.sub === i, esc(t.name), t.emb != null ? (t.text === false ? 'No vídeo · imagem, não suportada' : 'No vídeo') : t.path ? 'Arquivo escolhido' : 'Arquivo ao lado do vídeo', t.text === false)).join('') + '<div class="vpmi vpick" data-k="pick"><i class="ck">＋</i><span class="t"><b>Escolher arquivo de legenda…</b><small>.srt, .vtt ou .ass</small></span></div>';
+    else { sub.classList.remove('on'); return; }
+    sub.innerHTML = html; sub.classList.add('on');
+    sub.querySelectorAll('[data-k]').forEach(it => it.onclick = ev => {
+      ev.stopPropagation(); c.classList.remove('on'); sub.classList.remove('on'); const k = it.dataset.k;
+      if (k === 'pick') vpPickSub();
+      else if (k[0] === 'a') { VP.aspect = +k.slice(1); vpAspect(0); vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
+      else if (k[0] === 'u') vpSetAud(+k.slice(1), true);
+      else if (k[0] === 's') vpSetSub(+k.slice(1));
+    });
+    const rc = c.getBoundingClientRect(), rr = rowEl.getBoundingClientRect(), rs = sub.getBoundingClientRect();
+    const left = rc.right + rs.width + 6 <= innerWidth - 8 ? rc.right + 4 : rc.left - rs.width - 4;
+    sub.style.left = Math.max(8, left) + 'px'; sub.style.top = Math.max(8, Math.min(rr.top - 6, innerHeight - rs.height - 8)) + 'px';
+  };
+  c.querySelectorAll('.vpcr').forEach(r => {
+    const k = r.dataset.k;
+    r.onmouseenter = () => openSub(k, r);
+    r.onclick = ev => { ev.stopPropagation(); if (k === 'reveal') { c.classList.remove('on'); sub.classList.remove('on'); const g = VP.g; if (document.body.classList.contains('vpfull')) vpAct('full'); api('/api/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: g.path }) }).catch(er => toast(er.message, true)); } else openSub(k, r); };
   });
-  c.classList.add('on');
+  sub.classList.remove('on'); c.classList.add('on');
   const r = c.getBoundingClientRect(); c.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px'; c.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
 }
 
