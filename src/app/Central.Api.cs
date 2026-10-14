@@ -301,7 +301,7 @@ static partial class Central
                 {   // legenda embutida: extrai uma vez e guarda no cache
                     string cd = Path.Combine(CacheDir, "subs"), cf = Path.Combine(cd, Hash(vf + "|" + new FileInfo(vf).Length + "|" + emb) + ".vtt");
                     string vtt = File.Exists(cf) ? File.ReadAllText(cf, Encoding.UTF8) : null;
-                    if (vtt == null) { vtt = MkvSubToVtt(vf, emb); if (vtt != null) { Directory.CreateDirectory(cd); File.WriteAllText(cf, vtt, Utf8); } }
+                    if (vtt == null) { vtt = EmbeddedSubToVtt(vf, emb); if (vtt != null) { Directory.CreateDirectory(cd); File.WriteAllText(cf, vtt, Utf8); } }
                     if (vtt == null) { Send(ctx, 404, "text/plain", new byte[0]); return; }
                     Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(vtt)); return;
                 }

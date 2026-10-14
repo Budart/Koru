@@ -131,9 +131,121 @@ static partial class Central
         { "por", "Português" }, { "pt", "Português" }, { "pob", "Português (Brasil)" }, { "pt-br", "Português (Brasil)" }, { "eng", "Inglês" }, { "en", "Inglês" }, { "spa", "Espanhol" }, { "es", "Espanhol" },
         { "jpn", "Japonês" }, { "ja", "Japonês" }, { "fre", "Francês" }, { "fra", "Francês" }, { "fr", "Francês" }, { "ger", "Alemão" }, { "deu", "Alemão" }, { "de", "Alemão" }, { "ita", "Italiano" }, { "it", "Italiano" },
         { "kor", "Coreano" }, { "ko", "Coreano" }, { "chi", "Chinês" }, { "zho", "Chinês" }, { "zh", "Chinês" }, { "rus", "Russo" }, { "ru", "Russo" } };
+    // ---------- MP4/MOV (legendas tx3g "mov_text" e WebVTT) ----------
+    class Mp4Track { public int Id, Timescale = 1000; public string Handler = "", Codec = "", Lang = "", Name = ""; public byte[] Stts, Stsz, Stsc, Stco; public bool Co64, Def; }
+    static uint U32(byte[] b, int o) { return (uint)(b[o] << 24 | b[o + 1] << 16 | b[o + 2] << 8 | b[o + 3]); }
+    static ulong U64(byte[] b, int o) { return ((ulong)U32(b, o) << 32) | U32(b, o + 4); }
+    static byte[] ReadMoov(string file)
+    {
+        using (var s = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16))
+        {
+            var h = new byte[16]; long pos = 0, len = s.Length;
+            while (pos + 8 <= len)
+            {
+                s.Position = pos; if (s.Read(h, 0, 8) < 8) break;
+                long size = U32(h, 0); string type = Encoding.ASCII.GetString(h, 4, 4); int hl = 8;
+                if (size == 1) { s.Read(h, 8, 8); size = (long)U64(h, 8); hl = 16; } else if (size == 0) size = len - pos;
+                if (size < hl) break;
+                if (type == "moov") { if (size > 400L << 20) return null; var b = new byte[size - hl]; s.Read(b, 0, b.Length); return b; }
+                pos += size;
+            }
+        }
+        return null;
+    }
+    static IEnumerable<Tuple<string, int, int>> Boxes(byte[] b, int start, int end)
+    {
+        int p = start;
+        while (p + 8 <= end)
+        {
+            long size = U32(b, p); string type = Encoding.ASCII.GetString(b, p + 4, 4); int hl = 8;
+            if (size == 1) { size = (long)U64(b, p + 8); hl = 16; } else if (size == 0) size = end - p;
+            if (size < hl || p + size > end) yield break;
+            yield return Tuple.Create(type, p + hl, (int)(p + size)); p += (int)size;
+        }
+    }
+    static Tuple<string, int, int> Box(byte[] b, int start, int end, string type) { return Boxes(b, start, end).FirstOrDefault(x => x.Item1 == type); }
+    static List<Mp4Track> Mp4SubTracks(string file)
+    {
+        var res = new List<Mp4Track>(); var m = ReadMoov(file); if (m == null) return res;
+        foreach (var trak in Boxes(m, 0, m.Length).Where(x => x.Item1 == "trak"))
+        {
+            var t = new Mp4Track(); var tkhd = Box(m, trak.Item2, trak.Item3, "tkhd"); var mdia = Box(m, trak.Item2, trak.Item3, "mdia");
+            if (tkhd == null || mdia == null) continue;
+            t.Id = (int)U32(m, tkhd.Item2 + (m[tkhd.Item2] == 1 ? 20 : 12)); t.Def = (m[tkhd.Item2 + 3] & 1) != 0;
+            var mdhd = Box(m, mdia.Item2, mdia.Item3, "mdhd"); var hdlr = Box(m, mdia.Item2, mdia.Item3, "hdlr"); var minf = Box(m, mdia.Item2, mdia.Item3, "minf");
+            if (mdhd != null)
+            {
+                int o = mdhd.Item2; bool v1 = m[o] == 1; t.Timescale = (int)U32(m, o + (v1 ? 20 : 12));
+                int lp = o + (v1 ? 32 : 20); int code = (m[lp] << 8) | m[lp + 1];
+                if (code != 0 && code != 0x7FFF) t.Lang = new string(new[] { (char)(((code >> 10) & 31) + 0x60), (char)(((code >> 5) & 31) + 0x60), (char)((code & 31) + 0x60) });
+            }
+            var elng = Box(m, mdia.Item2, mdia.Item3, "elng"); if (elng != null) t.Lang = Encoding.ASCII.GetString(m, elng.Item2 + 4, elng.Item3 - elng.Item2 - 4).TrimEnd('\0');
+            if (hdlr != null) { t.Handler = Encoding.ASCII.GetString(m, hdlr.Item2 + 8, 4); if (hdlr.Item3 > hdlr.Item2 + 24) t.Name = Encoding.UTF8.GetString(m, hdlr.Item2 + 24, hdlr.Item3 - hdlr.Item2 - 24).Trim('\0', ' '); }
+            if (!(t.Handler == "sbtl" || t.Handler == "text" || t.Handler == "subt") || minf == null) continue;
+            var stbl = Box(m, minf.Item2, minf.Item3, "stbl"); if (stbl == null) continue;
+            var stsd = Box(m, stbl.Item2, stbl.Item3, "stsd"); if (stsd != null && stsd.Item3 - stsd.Item2 >= 16) t.Codec = Encoding.ASCII.GetString(m, stsd.Item2 + 12, 4);
+            Func<string, byte[]> raw = n => { var x = Box(m, stbl.Item2, stbl.Item3, n); if (x == null) return null; var r = new byte[x.Item3 - x.Item2]; Buffer.BlockCopy(m, x.Item2, r, 0, r.Length); return r; };
+            t.Stts = raw("stts"); t.Stsz = raw("stsz"); t.Stsc = raw("stsc"); t.Stco = raw("stco"); if (t.Stco == null) { t.Stco = raw("co64"); t.Co64 = true; }
+            var udta = Box(m, trak.Item2, trak.Item3, "udta"); if (udta != null) { var nm = Box(m, udta.Item2, udta.Item3, "name"); if (nm != null) t.Name = Encoding.UTF8.GetString(m, nm.Item2, nm.Item3 - nm.Item2).Trim('\0', ' '); }
+            if (Regex.IsMatch(t.Name, @"^(Core Media|SubtitleHandler|Apple|GPAC|VideoHandler|TextHandler)", RegexOptions.IgnoreCase) || t.Name.EndsWith("Handler")) t.Name = "";
+            res.Add(t);
+        }
+        return res;
+    }
+    static string Mp4SubToVtt(string file, int id)
+    {
+        var t = Mp4SubTracks(file).FirstOrDefault(x => x.Id == id); if (t == null || t.Stts == null || t.Stsz == null || t.Stsc == null || t.Stco == null) return null;
+        if (t.Codec != "tx3g" && t.Codec != "wvtt" && t.Codec != "text") return null;
+        // tamanhos, chunks e tempos de cada amostra
+        int n = (int)U32(t.Stsz, 8); uint fixedSz = U32(t.Stsz, 4); var sizes = new uint[n]; for (int i = 0; i < n; i++) sizes[i] = fixedSz != 0 ? fixedSz : U32(t.Stsz, 12 + i * 4);
+        int nc = (int)U32(t.Stco, 4); var offs = new long[nc]; for (int i = 0; i < nc; i++) offs[i] = t.Co64 ? (long)U64(t.Stco, 8 + i * 8) : U32(t.Stco, 8 + i * 4);
+        var sampOff = new long[n]; int ns = (int)U32(t.Stsc, 4), si = 0;
+        for (int e = 0; e < ns && si < n; e++)
+        {
+            int first = (int)U32(t.Stsc, 8 + e * 12) - 1, per = (int)U32(t.Stsc, 12 + e * 12), last = e + 1 < ns ? (int)U32(t.Stsc, 8 + (e + 1) * 12) - 1 : nc;
+            for (int c = first; c < last && si < n; c++) { long o = offs[c]; for (int k = 0; k < per && si < n; k++) { sampOff[si] = o; o += sizes[si]; si++; } }
+        }
+        var times = new long[n + 1]; int nt = (int)U32(t.Stts, 4), ti = 0; long tm = 0;
+        for (int e = 0; e < nt; e++) { uint cnt = U32(t.Stts, 8 + e * 8), d = U32(t.Stts, 12 + e * 8); for (uint k = 0; k < cnt && ti < n; k++) { times[ti++] = tm; tm += d; } }
+        while (ti <= n) times[ti++] = tm;
+        var sb = new StringBuilder("WEBVTT\n\n");
+        using (var s = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16))
+            for (int i = 0; i < n; i++)
+            {
+                if (sizes[i] < 2) continue; var b = new byte[sizes[i]]; s.Position = sampOff[i]; s.Read(b, 0, b.Length); string text = "";
+                if (t.Codec == "wvtt") { foreach (var bx in Boxes(b, 0, b.Length).Where(x => x.Item1 == "vttc")) { var pl = Box(b, bx.Item2, bx.Item3, "payl"); if (pl != null) text += (text != "" ? "\n" : "") + Encoding.UTF8.GetString(b, pl.Item2, pl.Item3 - pl.Item2); } }
+                else
+                {
+                    int L = (b[0] << 8) | b[1]; if (L <= 0 || L > b.Length - 2) continue;
+                    text = L >= 2 && b[2] == 0xFE && b[3] == 0xFF ? Encoding.BigEndianUnicode.GetString(b, 4, L - 2) : Encoding.UTF8.GetString(b, 2, L);
+                }
+                text = text.Replace("\r", "").Trim(); if (text == "") continue;
+                double a = times[i] * 1000.0 / t.Timescale, z = times[i + 1] * 1000.0 / t.Timescale;
+                sb.Append(VttTime(a) + " --> " + VttTime(z) + "\n" + text + "\n\n");
+            }
+        return sb.ToString();
+    }
+    static string EmbeddedSubToVtt(string vf, int id) { return IsMp4(vf) ? Mp4SubToVtt(vf, id) : MkvSubToVtt(vf, id); }
+    static bool IsMp4(string vf) { return Regex.IsMatch(Path.GetExtension(vf), @"^\.(mp4|m4v|mov|3gp)$", RegexOptions.IgnoreCase); }
+
     static List<object> EmbeddedSubs(string vf)
     {
         var list = new List<object>();
+        if (IsMp4(vf))
+        {
+            try
+            {
+                foreach (var t in Mp4SubTracks(vf))
+                {
+                    string ln; LangNames.TryGetValue((t.Lang ?? "").ToLowerInvariant(), out ln);
+                    bool text = t.Codec == "tx3g" || t.Codec == "wvtt" || t.Codec == "text";
+                    string name = (ln ?? (t.Lang == "" || t.Lang == "und" ? "Legenda" : t.Lang)) + (t.Name != "" && t.Name != ln ? " — " + t.Name : "");
+                    list.Add(new Dictionary<string, object> { { "name", name }, { "lang", t.Lang ?? "" }, { "emb", t.Id }, { "text", text }, { "def", t.Def } });
+                }
+            }
+            catch { }
+            return list;
+        }
         if (!Regex.IsMatch(Path.GetExtension(vf), @"^\.(mkv|webm|mka)$", RegexOptions.IgnoreCase)) return list;
         try
         {
