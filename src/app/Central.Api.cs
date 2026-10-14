@@ -140,6 +140,7 @@ static partial class Central
                 if (!parsed.ContainsKey("consoles")) throw new Exception("Configuração inválida");
                 SaveConfigText(bodyText);
                 ApplyAutostart(parsed);
+                try { string hk = parsed.ContainsKey("miniHotkey") ? S(parsed, "miniHotkey") : "Win+F"; WebHost.miniUi.BeginInvoke((Action)(() => WebHost.SetHotkey(hk))); } catch { }
                 SendJson(ctx, new Dictionary<string, object> { { "ok", true } });
             }
             else if (path == "/api/browse" && req.HttpMethod == "POST")

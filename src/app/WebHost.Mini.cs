@@ -8,15 +8,17 @@ using Microsoft.Web.WebView2.WinForms;
 static partial class WebHost
 {
     static Form mini; static WebView2 miniView; static bool miniReady; static DateTime miniHidAt;
-    public static void ToggleMini()
+    public static void ToggleMini() { ToggleMini(false); }
+    public static void ToggleMini(bool top)
     {
         if (mini != null && mini.Visible) { HideMini(); return; }
         if ((DateTime.Now - miniHidAt).TotalMilliseconds < 300) return;   // o clique que tirou o foco já fechou a janelinha
         if (form == null || form.IsDisposed) { Create(); form.Opacity = 0; form.Show(); form.Hide(); form.Opacity = 1; }   // motor da página pronto, sem mostrar a janela principal
         if (mini == null || mini.IsDisposed) CreateMini();
         var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
-        mini.Location = new Point(wa.Right - mini.Width - 12, wa.Bottom - mini.Height - 12);
-        mini.Show(); mini.Activate();
+        mini.Location = top ? new Point(wa.Left + (wa.Width - mini.Width) / 2, wa.Top + Math.Max(24, wa.Height / 12))   // atalho de teclado: no topo, centralizada
+                            : new Point(wa.Right - mini.Width - 12, wa.Bottom - mini.Height - 12);                     // bandeja: no canto
+        mini.Show(); mini.Activate(); ForceForeground(mini.Handle);
         if (miniReady) { try { miniView.Focus(); miniView.CoreWebView2.ExecuteScriptAsync("window.miniShown&&miniShown()"); } catch { } }
     }
     static void HideMini() { if (mini == null || !mini.Visible) return; mini.Hide(); miniHidAt = DateTime.Now; }

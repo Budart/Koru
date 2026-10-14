@@ -92,6 +92,8 @@ static partial class Central
         tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) try { WebHost.ToggleMini(); } catch (Exception ex) { CrashLog("mini", ex); } };   // um clique: mini busca
         tray.DoubleClick += (s, e) => OpenBrowser();
         var ui = new Control(); var h = ui.Handle;   // para voltar à thread da interface
+        WebHost.miniUi = ui;
+        try { var c0 = LoadConfig(); WebHost.SetHotkey(c0.ContainsKey("miniHotkey") ? S(c0, "miniHotkey") : "Win+F"); } catch { }
         new Thread(() => { while (true) { showEvt.WaitOne(); try { ui.BeginInvoke((Action)(() => OpenBrowser())); } catch { } } }) { IsBackground = true }.Start();
         if (!silent) OpenBrowser();
         Application.Run();
