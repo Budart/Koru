@@ -77,7 +77,7 @@ static partial class Central
         try { var sm = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Koru"); if (Directory.Exists(sm)) Directory.Delete(sm, true); } catch { }
         // som e vídeo: sempre sai junto (player mpv, conversor FFmpeg, miniaturas, legendas extraídas, durações)
         foreach (var n in new[] { "mpv", "ffmpeg" }) foreach (var p in Process.GetProcessesByName(n)) try { var f = p.MainModule.FileName; if (f.StartsWith(data, StringComparison.OrdinalIgnoreCase)) { p.Kill(); p.WaitForExit(2000); } } catch { }
-        foreach (var d in new[] { Path.Combine(data, "mpv"), Path.Combine(data, "ffmpeg"), Path.Combine(CacheDir, "vthumb"), Path.Combine(CacheDir, "subs") }) try { if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
+        foreach (var d in new[] { Path.Combine(data, "tradutor"), Path.Combine(data, "mpv"), Path.Combine(data, "ffmpeg"), Path.Combine(CacheDir, "vthumb"), Path.Combine(CacheDir, "subs") }) try { if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
         try { var vd = Path.Combine(CacheDir, "vdur.json"); if (File.Exists(vd)) File.Delete(vd); } catch { }
         string extra = "";
         if (wipe)

@@ -29,7 +29,7 @@ static partial class WebHost
             else { FormBorderStyle = FormBorderStyle.Sizable; WindowState = FormWindowState.Normal; WindowState = before; Full = false; }
         }
     }
-    static HostForm form;
+    static HostForm form; internal static Control UiCtl { get { return form; } }
     static bool fxFull;
     static WebView2 view;
     static bool ready;

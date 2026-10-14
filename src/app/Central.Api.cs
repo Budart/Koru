@@ -382,10 +382,8 @@ static partial class Central
             }
             else if (path == "/api/tradutor" && req.HttpMethod == "POST")
             {
-                // Tradutor de Tela (app próprio instalado à parte): abre a janela translúcida de tradução
-                string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "TradutorDeTela", "TradutorDeTela.exe");
-                if (!File.Exists(exe)) { SendJson(ctx, new Dictionary<string, object> { { "ok", false }, { "msg", "Tradutor de Tela não encontrado em " + exe } }); return; }
-                try { Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) }); SendJson(ctx, new Dictionary<string, object> { { "ok", true } }); }
+                // Tradutor de Tela (integrado ao Koru): abre a janela translúcida de tradução
+                try { Control ui = WebHost.UiCtl ?? WebHost.miniUi; ui.BeginInvoke((Action)(() => { try { Tradutor.Open(); } catch (Exception ex) { MessageBox.Show(ex.Message, "Tradutor"); } })); SendJson(ctx, new Dictionary<string, object> { { "ok", true } }); }
                 catch (Exception ex) { SendJson(ctx, new Dictionary<string, object> { { "ok", false }, { "msg", ex.Message } }); }
             }
             else if (path == "/api/open" && req.HttpMethod == "POST")
