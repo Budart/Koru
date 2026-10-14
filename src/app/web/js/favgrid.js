@@ -715,8 +715,11 @@ const fgBgOfs = g => { const v = covers['bofs|' + coverKey(g)]; if (!v) return n
 async function fgBgRender(l, url, g) {
   const tok = fgBgTok, o = fgBgOfs(g), manual = !!covers['bg|' + coverKey(g)];
   // sempre pela cópia local (mesma origem): assim o canvas pode ler os pixels para esticar/embaçar as bordas
-  const src = /^https?:/.test(url) ? '/api/img?u=' + encodeURIComponent(url) + '&k=bg' : cp(url), im = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
-  if (!im || tok !== fgBgTok && l.parentNode !== $('fgBg')) return;
+  const load = u => new Promise(ok => { const i = new Image(); i.onload = () => ok(i.naturalWidth > 1 ? i : null); i.onerror = () => ok(null); i.src = u; });
+  // cópia local de fundo > cópia local de capa > direto do site (se uma falhar, o fundo não fica preto)
+  const alts = /^https?:/.test(url) ? ['/api/img?u=' + encodeURIComponent(url) + '&k=bg', '/api/img?u=' + encodeURIComponent(url), url] : [cp(url)];
+  let src = alts[0], im = null; for (const u of alts) { im = await load(u); if (im) { src = u; break; } }
+  if (!im || tok !== fgBgTok && l.parentNode !== $('fgBg')) return;   // nenhuma carregou: mantém a camada como está
   const W = l.offsetWidth || innerWidth, H = l.offsetHeight || innerHeight, iw = im.naturalWidth, ih = im.naturalHeight;
   const cover = Math.max(W / iw, H / ih), contain = Math.min(W / iw, H / ih);
   const sc = o ? cover * o.z : manual ? Math.min(cover, Math.max(contain, 1)) : cover;

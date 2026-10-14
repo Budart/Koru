@@ -426,11 +426,15 @@ static partial class Central
                 string cdir = req.QueryString["k"] == "bg" ? BgCacheDir : CacheDir;   // fundos em pasta própria (limpáveis à parte)
                 string f = Path.Combine(cdir, Hash(u));
                 byte[] data = null;
+                string other = Path.Combine(cdir == BgCacheDir ? CacheDir : BgCacheDir, Hash(u));   // a mesma imagem já baixada como capa/fundo: reaproveita (sem baixar de novo)
                 if (File.Exists(f)) data = File.ReadAllBytes(f);
+                else if (File.Exists(other)) { data = File.ReadAllBytes(other); try { Directory.CreateDirectory(cdir); File.Copy(other, f, true); } catch { } }
                 else
                 {
+                    for (int tent = 0; tent < 2 && data == null; tent++)
                     try
                     {
+                        if (tent > 0) Thread.Sleep(800);   // 2ª tentativa (sites que recusam pedidos seguidos)
                         ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                         using (var wc = new WebClient())
                         {
@@ -443,9 +447,10 @@ static partial class Central
                             data = wc.DownloadData(u);
                         }
                         object en; bool on = !(cfg.TryGetValue("coverCache", out en) && en is bool && !(bool)en);
-                        if (on && data.Length > 0) { Directory.CreateDirectory(cdir); File.WriteAllBytes(f, data); }
+                        if (on && data.Length > 0) try { Directory.CreateDirectory(cdir); File.WriteAllBytes(f, data); } catch { }
                     }
-                    catch { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                    catch { data = null; }
+                    if (data == null || data.Length == 0) { Send(ctx, 404, "text/plain", new byte[0]); return; }
                 }
                 string type = data.Length > 3 && data[0] == 0x89 ? "image/png" : data.Length > 3 && data[0] == 0xFF ? "image/jpeg" : data.Length > 3 && data[0] == (byte)'<' ? "image/svg+xml" : data.Length > 3 && data[0] == (byte)'R' ? "image/webp" : "image/gif";
                 ctx.Response.Headers["Cache-Control"] = "max-age=31536000";

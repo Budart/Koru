@@ -104,12 +104,13 @@ async function setBg(url, mode, instant) {
   const id = url + '|' + mode; if (id === bgCur) return; bgCur = id;
   const tok = ++bgTok, host = $('gameBg');
   if (url && artAlts(url).length > 1) url = await artResolve(url);   // imagem do tema: usa a reserva se a original falhar
-  else if (url && !instant) { const r = await Promise.race([loadImg(url), new Promise(r => setTimeout(() => r('t'), 1200))]); if (r === null && url.startsWith('/api/img?u=')) url = decodeURIComponent(url.slice(11).replace(/&k=bg$/, '')); }
+  else if (url && !instant) { const r = await Promise.race([loadImg(url), new Promise(r => setTimeout(() => r('t'), 1200))]); if (r === null && url.startsWith('/api/img?u=')) { const plain = url.replace(/&k=bg$/, ''); url = plain !== url && await loadImg(plain) ? plain : decodeURIComponent(plain.slice(11)); } }
   if (tok !== bgTok) return;
   const old = [...host.querySelectorAll('.bgl')];
   if (url) {
     const l = document.createElement('div'); l.className = 'bgl' + (mode ? ' ' + mode : ''); l.style.backgroundImage = `url("${url}")`;
     host.appendChild(l); requestAnimationFrame(() => requestAnimationFrame(() => l.classList.add('on')));
+    if (url.startsWith('/api/img?u=')) loadImg(url, 30000).then(ok => { if (ok || !l.parentNode) return; const plain = url.replace(/&k=bg$/, ''); loadImg(plain, 30000).then(ok2 => { if (l.parentNode) l.style.backgroundImage = `url("${ok2 ? plain : decodeURIComponent(plain.slice(11))}")`; }); });   // demorou e falhou: usa outra cópia (nunca fica preto)
   }
   old.forEach(o => { o.classList.remove('on'); setTimeout(() => o.remove(), 700); });
 }
