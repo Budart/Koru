@@ -100,6 +100,40 @@ static partial class Central
         }
         return res;
     }
+    // ---- duração dos vídeos: lida pelo próprio Windows (mesma coluna "Duração" do Explorador) e guardada em cache ----
+    [StructLayout(LayoutKind.Sequential, Pack = 4)] struct PropKey { public Guid fmtid; public uint pid; }
+    [StructLayout(LayoutKind.Explicit, Size = 24)] struct PropVar { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public ulong ul; }
+    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore { [PreserveSig] int GetCount(out uint c); [PreserveSig] int GetAt(uint i, out PropKey k); [PreserveSig] int GetValue(ref PropKey k, out PropVar v); }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHGetPropertyStoreFromParsingName(string path, IntPtr pbc, int flags, ref Guid riid, out IPropertyStore ps);
+    [DllImport("ole32.dll")] static extern int PropVariantClear(ref PropVar v);
+    static Dictionary<string, string> durCache; static readonly object durLock = new object(); static bool durDirty;
+    static string DurFile { get { return Path.Combine(CacheDir, "vdur.json"); } }
+    static double VideoSeconds(FileInfo f)
+    {
+        string key = f.FullName.ToLowerInvariant(), sig = f.Length + "|" + f.LastWriteTimeUtc.Ticks;
+        lock (durLock)
+        {
+            if (durCache == null) { durCache = new Dictionary<string, string>(); try { foreach (var kv in (Dictionary<string, object>)Json.DeserializeObject(File.ReadAllText(DurFile))) durCache[kv.Key] = kv.Value as string ?? ""; } catch { } }
+            string v; if (durCache.TryGetValue(key, out v) && v.StartsWith(sig + "|")) return double.Parse(v.Substring(sig.Length + 1), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        double secs = 0;
+        try
+        {
+            var iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"); IPropertyStore ps;
+            if (SHGetPropertyStoreFromParsingName(f.FullName, IntPtr.Zero, 0, ref iid, out ps) == 0 && ps != null)
+            {
+                var pk = new PropKey { fmtid = new Guid("64440490-4C8B-11D1-8B70-080036B11A03"), pid = 3 }; PropVar pv;
+                if (ps.GetValue(ref pk, out pv) == 0) { if (pv.vt == 21) secs = pv.ul / 1e7; PropVariantClear(ref pv); }
+                Marshal.ReleaseComObject(ps);
+            }
+        }
+        catch { }
+        lock (durLock) { durCache[key] = sig + "|" + secs.ToString(System.Globalization.CultureInfo.InvariantCulture); durDirty = true; }
+        return secs;
+    }
+    static void SaveDurations() { lock (durLock) { if (!durDirty || durCache == null) return; try { Directory.CreateDirectory(CacheDir); File.WriteAllText(DurFile, Json.Serialize(durCache)); durDirty = false; } catch { } } }
+
     static List<Dictionary<string, object>> Games(string root, Dictionary<string, object> c)
     {
         var exts = new HashSet<string>(L(c, "extensions").Select(e => "." + e.ToLowerInvariant()));
@@ -140,7 +174,11 @@ static partial class Central
                     {   // vídeos: categoria = 1ª subpasta; pasta privada só aparece quando o usuário revela
                         string rel = f.DirectoryName.Length > dir.TrimEnd('\\').Length ? f.DirectoryName.Substring(dir.TrimEnd('\\').Length).Trim('\\') : "";
                         bool priv = L(c, "privateDirs").Any(x => !string.IsNullOrWhiteSpace(x) && Full(root, x).TrimEnd('\\').Equals(dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-                        var vg = new Dictionary<string, object> { { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds }, { "cat", rel == "" ? "" : rel.Split('\\')[0] } };
+                        // subcategoria dos vídeos: pela duração (Filmes ≥ 1 h, Vídeos < 1 h); com mais de uma pasta principal, o nome dela vem antes
+                        double secs = VideoSeconds(f); bool movie = secs > 0 ? secs >= 3600 : f.Length >= 700L * 1024 * 1024;
+                        string kind = movie ? "Filmes" : "Vídeos", mainDirs = dirs.Count(x => !string.IsNullOrWhiteSpace(x) && !L(c, "privateDirs").Contains(x)) > 1 ? new DirectoryInfo(dir).Name + " · " : "";
+                        var vg = new Dictionary<string, object> { { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds }, { "cat", mainDirs + kind } };
+                        if (secs > 0) vg["secs"] = (long)secs;
                         if (priv) vg["priv"] = true;
                         games.Add(vg); continue;
                     }
@@ -152,6 +190,7 @@ static partial class Central
             }
         }
         if (IsPc(c)) games = PcDedupe(root, games, sd.Values.Select(x => Full(root, x)).ToList());
+        if (IsVideo(c)) SaveDurations();
         return games.OrderBy(g => (string)g["name"], StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 

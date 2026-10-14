@@ -33,7 +33,7 @@ function vpEl() {
       <div class="vpmenu-w"><button class="vpb" data-a="sub" title="Legendas (S)">${VP_ICO.sub}</button><div class="vpmenu" id="vpSubs"></div></div>
       <button class="vpb wide" data-a="asp" id="vpAsp" title="Proporção (Ctrl+scroll)">${VP_ICO.asp}<span>Original</span></button>
       <button class="vpb wide" data-a="bri" id="vpBri" title="Brilho (B) — vídeos HDR costumam ficar escuros">${VP_ICO.bri}<span>100%</span></button>
-      <button class="vpb wide" data-a="hq" title="Abrir no player avançado (upscaling, todos os formatos)">${VP_ICO.hq}<span>Upscaling</span></button>
+      <button class="vpb wide" data-a="up" id="vpUp" title="Upscaling (U): melhora a nitidez do vídeo ampliado, direto na placa de vídeo">${VP_ICO.hq}<span>Desligado</span></button>
       <button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
     </div></div></div>`;
   document.body.appendChild(el);
@@ -52,7 +52,7 @@ function vpEl() {
   sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { v.currentTime = t; vpPaint(); } };
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
-  el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpAspect(e.deltaY < 0 ? 1 : -1); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
+  el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
   window.addEventListener('resize', () => { if (VP.open) vpLayout(); });
   return el;
 }
@@ -67,6 +67,7 @@ async function openVPlayer(g) {
   let pos = 0; try { pos = +(localStorage.getItem('vpos|' + coverKey(g)) || 0); } catch (e) {}
   v.onloadeddata = () => { if (pos > 5 && v.duration && pos < v.duration - 10) v.currentTime = pos; v.onloadeddata = null; };
   { let b0 = 0; try { b0 = +(localStorage.getItem('vbri|' + coverKey(g)) || 0); } catch (e) {} VP.bri = b0 || (/\b(hdr|hdr10|dv|dovi|dolby.?vision)\b/i.test(g.name || g.path) ? 1.4 : 1); vpBri(0); }
+  VP.zoom = 1; VP.zx = 0; VP.zy = 0; vpZoomApply(); VP.up = +(localStorage.getItem('vpup') || 0) || 0; vpUpscale(0);
   el.classList.add('on'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
@@ -85,7 +86,7 @@ function vpFail() {
 function vpClose() {
   if (!VP.open) return; const v = $('vpV');
   if (v.currentTime > 5 && v.duration && v.currentTime < v.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v.currentTime); } catch (e) {}
-  v.pause(); v.removeAttribute('src'); v.load(); clearInterval(VP.saveT);
+  v.pause(); v.removeAttribute('src'); v.load(); clearInterval(VP.saveT); vpGlStop();
   VP.open = false; $('vplayer').classList.remove('on');
   if (host && document.body.classList.contains('vpfull')) { document.body.classList.remove('vpfull'); host.postMessage('fs'); }
   sfx('back');
@@ -102,6 +103,7 @@ function vpSeek(dt) { const v = $('vpV'); v.currentTime = Math.max(0, Math.min((
 function vpOsd(t) { const m = $('vpMsg'); if ($('vplayer').classList.contains('fail')) return; m.textContent = t; m.classList.add('on'); clearTimeout(vpOsd.t); vpOsd.t = setTimeout(() => m.classList.remove('on'), 1200); }
 function vpAspect(d) { VP.aspect = (VP.aspect + d + VP_ASPECTS.length) % VP_ASPECTS.length; $('vpAsp').querySelector('span').textContent = VP_ASPECTS[VP.aspect][1]; vpLayout(); if (d) vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
 function vpLayout() {
+  setTimeout(vpGlSize, 0);
   const box = $('vplayer').querySelector('.vpbox'), v = $('vpV'), k = VP_ASPECTS[VP.aspect][0], fr = $('vplayer').querySelector('.vpframe').getBoundingClientRect(), W = fr.width, H = fr.height;
   v.style.objectFit = k === 'fill' ? 'cover' : k === 'auto' ? 'contain' : 'fill';
   if (k === 'auto' || k === 'fill' || k === 'stretch') { Object.assign(box.style, { width: W + 'px', height: H + 'px' }); return; }
@@ -110,8 +112,15 @@ function vpLayout() {
 }
 function vpSetSub(k) {
   const tr = [...$('vpV').textTracks]; VP.sub = k;
-  tr.forEach((t, i) => t.mode = i === k ? 'showing' : 'disabled');
+  tr.forEach((t, i) => { t.mode = i === k ? 'hidden' : 'disabled'; t.oncuechange = i === k ? vpCues : null; });   // legenda desenhada pelo Koru (fica visível também com o upscaling)
+  vpCues();
   vpSubMenu();
+}
+function vpCues() {
+  let box = $('vpCues'); if (!box) { box = document.createElement('div'); box.id = 'vpCues'; $('vplayer').querySelector('.vpframe').appendChild(box); }
+  const t = VP.sub >= 0 ? [...$('vpV').textTracks][VP.sub] : null, cs = t && t.activeCues ? [...t.activeCues] : [];
+  box.innerHTML = cs.map(c => `<span>${esc(c.text).replace(/&lt;(\/?)(i|b|u)&gt;/g, '<$1$2>').replace(/\n/g, '<br>')}</span>`).join('<br>');
+  box.style.bottom = (100 - (+((VP.s && VP.s.subPos) || 95))) + 6 + '%';
 }
 function vpSubMenu() {
   const m = $('vpSubs'); if (!m) return;
@@ -121,7 +130,7 @@ function vpSubMenu() {
 function vpSubStyle(s) {
   let st = $('vpCue'); if (!st) { st = document.createElement('style'); st.id = 'vpCue'; document.head.appendChild(st); }
   const col = s.subColor === 'yellow' ? '#FFE14D' : s.subColor === 'cyan' ? '#7FE7FF' : '#fff', sz = (+s.subSize || 46) / 46 * 2.6, bg = s.subBg || 'outline';
-  st.textContent = `#vpV::cue { font: 600 ${sz.toFixed(2)}vw/1.25 "Segoe UI", sans-serif; color:${col}; background:${bg === 'box' ? 'rgba(0,0,0,.72)' : 'transparent'}; text-shadow:${bg === 'box' ? 'none' : bg === 'shadow' ? '2px 2px 4px #000' : '0 0 3px #000, 0 0 3px #000, 0 0 3px #000, 0 0 3px #000'}; }`;
+  st.textContent = `#vpCues span { font: 600 ${sz.toFixed(2)}vw/1.25 "Segoe UI", sans-serif; color:${col}; background:${bg === 'box' ? 'rgba(0,0,0,.72)' : 'transparent'}; text-shadow:${bg === 'box' ? 'none' : bg === 'shadow' ? '2px 2px 4px #000' : '0 0 3px #000, 0 0 3px #000, 0 0 3px #000, 0 0 3px #000'}; }`;
 }
 async function vpAct(a) {
   const v = $('vpV'); vpShow();
@@ -136,6 +145,7 @@ async function vpAct(a) {
   else if (a === 'close') vpClose();
   else if (a === 'max') { const el = $('vplayer'); el.classList.toggle('win'); el.classList.toggle('max', !el.classList.contains('win')); setTimeout(vpLayout, 260); }
   else if (a === 'next') { const n = vpNextOf(VP.g); if (!n) { vpOsd('Último vídeo da lista'); return; } const v0 = $('vpV'); if (v0.currentTime > 5 && v0.duration && v0.currentTime < v0.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v0.currentTime); } catch (e) {} const j = shown.indexOf(n); if (j >= 0 && typeof selectGame === 'function') selectGame(j, true); openVPlayer(n); vpOsd('▶ ' + dn(n)); }
+  else if (a === 'up') vpUpscale(1);
   else if (a === 'hq') {   // player avançado (mpv): upscaling + qualquer formato
     if (!await mpvReady(true)) return;
     const g = VP.g, t = v.currentTime; vpClose();
@@ -154,14 +164,14 @@ function vpInput(a) {
     return;
   }
   ({ ok: () => vpAct('play'), back: () => vpClose(), left: () => vpSeek(-10), right: () => vpSeek(10), up: () => vpVolume(.05), down: () => vpVolume(-.05),
-     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next') }[a] || (() => {}))();
+     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next'), lt: () => vpZoom(1 / 1.1), rt: () => vpZoom(1.1) }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri', u: 'hq', U: 'hq', n: 'next', N: 'next', Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri', u: 'up', U: 'up', n: 'next', N: 'next', Escape: 'close', Backspace: 'close' };
   e.preventDefault();
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
   if (k === 'PageUp') return vpSeek(-60); if (k === 'PageDown') return vpSeek(60);
-  if (e.ctrlKey && (k === '+' || k === '=')) return vpAspect(1); if (e.ctrlKey && k === '-') return vpAspect(-1);
+  if (e.ctrlKey && (k === '+' || k === '=')) return vpZoom(1.1); if (e.ctrlKey && k === '-') return vpZoom(1 / 1.1); if (e.ctrlKey && k === '0') return vpZoom(0);
   if (k === 'Escape' && document.body.classList.contains('vpfull')) return vpAct('full');
   if (map[k]) vpAct(map[k]);
 }
@@ -195,4 +205,70 @@ function vpBri(d) {
   if (d) { const i = VP_BRI.findIndex(x => Math.abs(x - VP.bri) < .01); VP.bri = VP_BRI[(i + 1) % VP_BRI.length]; try { localStorage.setItem('vbri|' + coverKey(VP.g), VP.bri); } catch (e) {} vpOsd('Brilho ' + Math.round(VP.bri * 100) + '%'); }
   $('vpV').style.filter = VP.bri > 1 ? `brightness(${VP.bri}) contrast(${(1 + (VP.bri - 1) * .25).toFixed(2)}) saturate(${(1 + (VP.bri - 1) * .3).toFixed(2)})` : '';
   $('vpBri').querySelector('span').textContent = Math.round(VP.bri * 100) + '%';
+}
+
+// zoom de verdade (Ctrl+scroll / Ctrl + −): amplia o vídeo em volta do mouse; arrastar com o mouse move a imagem ampliada
+function vpZoomApply() { const b = $('vplayer') && $('vplayer').querySelector('.vpbox'); if (!b) return; b.style.transform = `translate(-50%,-50%) translate(${VP.zx}px,${VP.zy}px) scale(${VP.zoom})`; }
+function vpZoom(f, e) {
+  if (!f) { VP.zoom = 1; VP.zx = VP.zy = 0; vpZoomApply(); vpOsd('Zoom 100%'); return; }
+  const z0 = VP.zoom, z = Math.max(1, Math.min(6, z0 * f));
+  if (z === 1) { VP.zx = VP.zy = 0; }
+  else if (e) { const r = $('vplayer').querySelector('.vpframe').getBoundingClientRect(), mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2; VP.zx = mx - (mx - VP.zx) * z / z0; VP.zy = my - (my - VP.zy) * z / z0; }
+  VP.zoom = z; vpZoomApply(); vpOsd('Zoom ' + Math.round(z * 100) + '%');
+}
+(() => { let d = null; document.addEventListener('pointerdown', e => { if (!VP.open || VP.zoom <= 1 || !e.target.closest('.vpbox')) return; d = { x: e.clientX, y: e.clientY, zx: VP.zx, zy: VP.zy, moved: false }; }, true);
+  document.addEventListener('pointermove', e => { if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; VP.zx = d.zx + dx; VP.zy = d.zy + dy; vpZoomApply(); });
+  document.addEventListener('pointerup', e => { if (d && d.moved) { const v = $('vpV'); const st = e => { e.stopPropagation(); v.removeEventListener('click', st, true); }; v.addEventListener('click', st, true); } d = null; }); })();
+
+/* ---------- upscaling na placa de vídeo (WebGL): ampliação suave + nitidez adaptativa (estilo AMD FSR/CAS) ---------- */
+const VP_UP = [['Desligado', 0], ['Suave', .45], ['Médio', .7], ['Forte', 1]];
+let vpGl = null;
+function vpUpscale(d) {
+  VP.up = ((VP.up || 0) + d + VP_UP.length) % VP_UP.length; try { localStorage.setItem('vpup', VP.up); } catch (e) {}
+  $('vpUp').querySelector('span').textContent = VP_UP[VP.up][0]; $('vpUp').classList.toggle('on', VP.up > 0);
+  if (d) vpOsd('Upscaling: ' + VP_UP[VP.up][0]);
+  if (VP.up > 0) vpGlStart(); else vpGlStop();
+}
+function vpGlStop() { if (!vpGl) return; vpGl.stop = true; try { vpGl.cv.remove(); } catch (e) {} $('vpV').style.opacity = ''; vpGl = null; }
+function vpGlSize() { if (!vpGl) return; const b = $('vplayer').querySelector('.vpbox'), r = b.getBoundingClientRect(), dpr = devicePixelRatio || 1; vpGl.cv.width = Math.round(b.clientWidth * dpr); vpGl.cv.height = Math.round(b.clientHeight * dpr); }
+function vpGlStart() {
+  if (vpGl) return; const v = $('vpV'), box = $('vplayer').querySelector('.vpbox');
+  const cv = document.createElement('canvas'); cv.className = 'vpgl'; const gl = cv.getContext('webgl', { premultipliedAlpha: false, alpha: false });
+  if (!gl) { vpOsd('Upscaling indisponível nesta placa de vídeo'); return; }
+  const vs = 'attribute vec2 p; varying vec2 uv; uniform vec4 fit; void main(){ uv = vec2(p.x*.5+.5, .5-p.y*.5); gl_Position = vec4(p*fit.xy + fit.zw, 0., 1.); }';
+  const fs = `precision highp float; varying vec2 uv; uniform sampler2D t; uniform vec2 px; uniform float sh;
+    vec3 T(vec2 o){ return texture2D(t, uv + o*px).rgb; }
+    void main(){
+      vec3 a=T(vec2(-1.,-1.)), b=T(vec2(0.,-1.)), c=T(vec2(1.,-1.)), d=T(vec2(-1.,0.)), e=T(vec2(0.)), f=T(vec2(1.,0.)), g=T(vec2(-1.,1.)), h=T(vec2(0.,1.)), i=T(vec2(1.,1.));
+      vec3 mn=min(min(min(d,e),min(f,b)),h), mx=max(max(max(d,e),max(f,b)),h);
+      vec3 mn2=min(mn,min(min(a,c),min(g,i))), mx2=max(mx,max(max(a,c),max(g,i))); mn+=mn2; mx+=mx2;
+      vec3 amp=clamp(min(mn,2.-mx)/max(mx,1e-4),0.,1.); amp=sqrt(amp);
+      float pk=-1./mix(8.,5.,sh); vec3 w=amp*pk;
+      vec3 r=(b*w+d*w+f*w+h*w+e)/(1.+4.*w);
+      gl_FragColor=vec4(clamp(r,0.,1.),1.);
+    }`;
+  const sh = (ty, src) => { const o = gl.createShader(ty); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { vpOsd('Upscaling indisponível'); return; }
+  gl.useProgram(pr);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, x]) => gl.texParameteri(gl.TEXTURE_2D, k, x));
+  const U = n => gl.getUniformLocation(pr, n), uPx = U('px'), uSh = U('sh'), uFit = U('fit');
+  box.appendChild(cv); vpGl = { cv, gl, stop: false }; vpGlSize();
+  const draw = () => {
+    if (!vpGl || vpGl.stop) return;
+    if (v.videoWidth && v.readyState >= 2) {
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v); } catch (e) { vpOsd('Upscaling indisponível para este vídeo'); VP.up = VP_UP.length - 1; vpUpscale(1); return; }
+      // mesmo enquadramento do vídeo (contain/cover/fill)
+      const W = cv.width, H = cv.height, vr = v.videoWidth / v.videoHeight, br = W / H, fit = v.style.objectFit || 'contain';
+      let sx = 1, sy = 1; if (fit === 'contain') { if (vr > br) sy = br / vr; else sx = vr / br; } else if (fit === 'cover') { if (vr > br) sx = vr / br; else sy = br / vr; }
+      gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform4f(uFit, sx, sy, 0, 0); gl.uniform2f(uPx, 1 / v.videoWidth, 1 / v.videoHeight); gl.uniform1f(uSh, VP_UP[VP.up][1]);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); v.style.opacity = '0'; cv.style.filter = v.style.filter;
+    }
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw); else requestAnimationFrame(draw);
+  };
+  draw();
 }

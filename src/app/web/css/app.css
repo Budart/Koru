@@ -862,3 +862,5 @@ body.crt .trt { display:none; } body.crt .trbtn { padding-right:8px; }
 body.vprevon #vidBox { opacity:0 !important; pointer-events:none; }
 #privTip { position:fixed; top:18px; left:50%; z-index:900; display:flex; align-items:center; gap:8px; padding:9px 18px 9px 14px; border-radius:22px; background:rgba(20,22,28,.94); color:#f1ece3; font:600 15px "Poppins",sans-serif; box-shadow:0 8px 24px rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.1); transform:translate(-50%,-140%); opacity:0; transition:transform .35s cubic-bezier(.3,1.4,.5,1), opacity .25s; pointer-events:none; }
 #privTip.on { transform:translate(-50%,0); opacity:1; } #privTip svg { width:20px; height:20px; fill:#3D7BFF; color:#3D7BFF; }
+#vplayer canvas.vpgl { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; filter:inherit; } #vplayer .vpb.on { color:#3D7BFF; }
+#vpCues { position:absolute; left:6%; right:6%; text-align:center; z-index:3; pointer-events:none; line-height:1.3; } #vpCues span { display:inline-block; padding:.05em .3em; border-radius:4px; }
