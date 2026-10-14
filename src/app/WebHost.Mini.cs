@@ -40,6 +40,7 @@ static partial class WebHost
                 await miniView.EnsureCoreWebView2Async(env);
                 miniView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 miniView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                miniView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;   // sem atalhos do navegador (busca F3/Ctrl+F, F5, Ctrl+P...)
                 miniView.CoreWebView2.AddWebResourceRequestedFilter(BaseUrl + "*", CoreWebView2WebResourceContext.All);
                 miniView.CoreWebView2.WebResourceRequested += OnRequest;
                 miniView.CoreWebView2.WebMessageReceived += (o, m) => OnMiniMessage(m.TryGetWebMessageAsString());

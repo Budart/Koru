@@ -186,6 +186,7 @@ static partial class WebHost
                 await view.EnsureCoreWebView2Async(env);
                 view.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 view.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                view.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;   // sem atalhos do navegador (busca F3/Ctrl+F, F5, Ctrl+P...)
                 view.CoreWebView2.WebMessageReceived += (o, m) => OnMessage(m.TryGetWebMessageAsString());
                 // o motor da página caiu (falta de memória, driver de vídeo...): registra e recarrega em vez de a janela "sumir"
                 view.CoreWebView2.ProcessFailed += (o, a) =>

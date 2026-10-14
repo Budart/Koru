@@ -194,7 +194,7 @@ document.addEventListener('keydown', e => {
   }
   if ($('ctx').classList.contains('on')) { e.preventDefault(); if (e.key === 'ArrowDown') ctxMove(1); else if (e.key === 'ArrowUp') ctxMove(-1); else if (e.key === 'Enter' || e.key === ' ') ctxOk(); else if (e.key === 'ArrowRight') ctxRight(); else if (e.key === 'Escape' || e.key === 'ArrowLeft') ctxLeft(); return; }
   if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h') && screen === 'games') { e.preventDefault(); togglePriv(); return; }
-  if (e.key === 'F4' && screen === 'systems') { e.preventDefault(); openTradutor(); return; }
+  if (e.key === 'F3') { e.preventDefault(); if (screen !== 'welcome') openTradutor(); return; }   // F3 = tradutor
   if (e.key === 'F1' && screen === 'favgrid' && !modalOpen && !$('ctx').classList.contains('on') && typeof fp !== 'undefined' && !fp.open) { e.preventDefault(); fgInput('menu'); return; }
   if (e.key === 'F1') { e.preventDefault(); if (screen !== 'config' && screen !== 'welcome') { if (modalOpen) closeCover(); openConfig(); } return; }
   if (screen === 'welcome' || renaming) return;
@@ -205,7 +205,7 @@ document.addEventListener('keydown', e => {
   if (screen === 'favgrid' && !modalOpen && (e.key === 'i' || e.key === 'I') && !e.ctrlKey && !e.altKey && fg.items[fg.sel]) { e.preventDefault(); fgInfo(true); return; }   // I = Info do card
   if (screen === 'favgrid' && !modalOpen && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); openGlobal(e.key); return; }   // digitar = busca geral
   if (screen === 'favgrid' && !modalOpen && e.key === ' ') { e.preventDefault(); fgInput('fav'); return; }   // Espaço = □ (mover card)
-  if (e.key === 'F3' && (screen === 'favgrid' || (screen === 'games' && favMode))) { e.preventDefault(); setFavView(favView === 'list' ? 'grid' : 'list'); return; }
+  if (e.key === 'F4' && (screen === 'favgrid' || (screen === 'games' && favMode))) { e.preventDefault(); setFavView(favView === 'list' ? 'grid' : 'list'); return; }
   if (e.key === 'F2' && screen === 'games' && shown[gIdx]) { e.preventDefault(); startRename(gIdx); return; }
   if (e.key === 'F2' && screen === 'favgrid' && fg.items[fg.sel] && !modalOpen) { e.preventDefault(); fgRename(); return; }
   if (screen === 'config') {   // teclado igual ao D-pad: setas navegam, Tab = próximo (Shift+Tab = anterior), Enter ativa, Esc volta
