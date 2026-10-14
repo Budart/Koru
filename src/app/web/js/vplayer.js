@@ -239,7 +239,10 @@ function vpRelease() { try { if (VP.open) vpClose(); } catch (e) {} try { vpPrev
 const VP_BRI = [1, 1.2, 1.4, 1.6, 1.8];
 function vpBri(d) {
   if (d) { const i = VP_BRI.findIndex(x => Math.abs(x - VP.bri) < .01); VP.bri = VP_BRI[(i + 1) % VP_BRI.length]; try { localStorage.setItem('vbri|' + coverKey(VP.g), VP.bri); } catch (e) {} vpOsd('Brilho ' + Math.round(VP.bri * 100) + '%'); }
-  $('vpV').style.filter = VP.bri !== 1 ? `brightness(${VP.bri}) contrast(${(1 + (VP.bri - 1) * .25).toFixed(2)}) saturate(${(1 + (VP.bri - 1) * .3).toFixed(2)})` : '';
+  // clareia de verdade: curva gama levanta sombras e meios-tons (sem estourar o branco) + um leve aumento de brilho
+  let f = $('vpGammaF'); if (!f) { const d = document.createElement('div'); d.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden'; d.innerHTML = '<svg width="0" height="0"><filter id="vpGamma" color-interpolation-filters="sRGB"><feComponentTransfer id="vpGammaF"><feFuncR type="gamma" amplitude="1" exponent="1"/><feFuncG type="gamma" amplitude="1" exponent="1"/><feFuncB type="gamma" amplitude="1" exponent="1"/></feComponentTransfer></filter></svg>'; document.body.appendChild(d); f = $('vpGammaF'); }
+  const ex = (1 / (1 + (VP.bri - 1) * 1.1)).toFixed(3); f.querySelectorAll('feFuncR,feFuncG,feFuncB').forEach(n => n.setAttribute('exponent', ex));
+  $('vpV').style.filter = VP.bri !== 1 ? `url(#vpGamma) brightness(${(1 + (VP.bri - 1) * .3).toFixed(3)})` : '';
   $('vpBri').querySelector('span').textContent = Math.round(VP.bri * 100) + '%';
 }
 
