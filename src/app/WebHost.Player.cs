@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
@@ -55,11 +56,16 @@ static partial class WebHost
             {
                 Directory.CreateDirectory(tmp);
                 MpvStep = "Procurando a versão mais recente...";
-                var js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-                var rel = (Dictionary<string, object>)js.DeserializeObject(Get("https://api.github.com/repos/mpv-player/mpv/releases/latest"));
                 string url = null;
-                foreach (Dictionary<string, object> a in (object[])rel["assets"]) { string n = (a["name"] ?? "").ToString(); if (n.EndsWith("x86_64-w64-mingw32.zip")) url = a["browser_download_url"].ToString(); }
-                if (url == null) throw new Exception("versão para Windows não encontrada");
+                try
+                {
+                    var js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                    var rel = (Dictionary<string, object>)js.DeserializeObject(Get("https://api.github.com/repos/mpv-player/mpv/releases/latest"));
+                    foreach (var o in (System.Collections.IEnumerable)rel["assets"]) { var a = (Dictionary<string, object>)o; string n = (a["name"] ?? "").ToString(); if (n.EndsWith("x86_64-w64-mingw32.zip")) url = a["browser_download_url"].ToString(); }
+                }
+                catch (Exception ex) { MpvLog("API: " + ex.Message); }
+                if (url == null) url = "https://github.com/mpv-player/mpv/releases/download/v0.41.0/mpv-v0.41.0-x86_64-w64-mingw32.zip";   // reserva
+                MpvLog("baixando " + url);
                 MpvStep = "Baixando o motor de vídeo...";
                 string zip = Path.Combine(tmp, "mpv.zip"); Fetch(url, zip, p => MpvProgress = p * 85 / 100);
                 MpvStep = "Instalando...";
@@ -83,11 +89,12 @@ static partial class WebHost
                 catch { }
                 MpvProgress = 100; MpvStep = "Pronto";
             }
-            catch (Exception ex) { MpvError = ex.Message; }
+            catch (Exception ex) { MpvError = ex.Message; MpvLog("ERRO: " + ex); }
             finally { try { Directory.Delete(tmp, true); } catch { } MpvBusy = false; }
         }) { IsBackground = true }.Start();
     }
 
+    public static void MpvLog(string m) { try { Directory.CreateDirectory(MpvDir); File.AppendAllText(Path.Combine(MpvDir, "koru-player.log"), DateTime.Now.ToString("s") + "  " + m + "\r\n"); } catch { } }
     // ---------- arquivos de configuração do player (gerados a cada reprodução) ----------
     const string InputConf = @"SPACE cycle pause
 MBTN_LEFT cycle pause
@@ -165,6 +172,7 @@ end
 mp.register_script_message('koru-aspect', function(d) ai = (ai - 1 + tonumber(d)) % #A + 1; aspect(true) end)
 mp.register_script_message('koru-scale', function(d) si = (si - 1 + tonumber(d)) % #S + 1; scale(true) end)
 mp.register_event('file-loaded', function() aspect(false); scale(false) end)
+mp.observe_property('fullscreen', 'bool', function(_, v) if v then mp.set_property_bool('fullscreen', false); mp.commandv('script-message', 'koru-fs') end end)
 ";
     const string MpvConf = @"vo=gpu-next
 gpu-api=d3d11
@@ -184,6 +192,55 @@ volume-max=150
 cursor-autohide=1500
 input-default-bindings=yes
 ";
+
+    // ---------- arquivo de vídeo para o player/prévia da página (com "Range": só lê o pedaço pedido, sem carregar o arquivo) ----------
+    public static Func<string, string, string> VideoFileOf;
+    class RangeStream : Stream
+    {
+        readonly Stream s; long left;
+        public RangeStream(Stream s, long start, long len) { this.s = s; s.Seek(start, SeekOrigin.Begin); left = len; }
+        public override int Read(byte[] b, int o, int c) { if (left <= 0) return 0; int n = s.Read(b, o, (int)Math.Min(c, left)); left -= n; return n; }
+        public override bool CanRead { get { return true; } } public override bool CanSeek { get { return false; } } public override bool CanWrite { get { return false; } }
+        public override long Length { get { throw new NotSupportedException(); } } public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
+        public override void Flush() { } public override long Seek(long a, SeekOrigin b) { throw new NotSupportedException(); } public override void SetLength(long v) { throw new NotSupportedException(); } public override void Write(byte[] b, int o, int c) { throw new NotSupportedException(); }
+        protected override void Dispose(bool d) { if (d) s.Dispose(); base.Dispose(d); }
+    }
+    static void ServeVideo(Microsoft.Web.WebView2.Core.CoreWebView2WebResourceRequestedEventArgs e, Microsoft.Web.WebView2.Core.CoreWebView2Deferral deferral)
+    {
+        string url = e.Request.Uri, range = null;
+        try { if (e.Request.Headers.Contains("Range")) range = e.Request.Headers.GetHeader("Range"); } catch { }
+        Task.Run(() =>
+        {
+            Stream body = null; int code = 404; string hdr = "Content-Type: text/plain";
+            try
+            {
+                var q = System.Web.HttpUtility.ParseQueryString(new Uri(url).Query);
+                string f = VideoFileOf == null ? null : VideoFileOf(q["c"], q["p"]);
+                if (f != null)
+                {
+                    var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16, FileOptions.SequentialScan);
+                    long len = fs.Length, a = 0, b = len - 1;
+                    var m = range == null ? null : Regex.Match(range, @"bytes=(\d*)-(\d*)");
+                    if (m != null && m.Success)
+                    {
+                        if (m.Groups[1].Value != "") { a = long.Parse(m.Groups[1].Value); if (m.Groups[2].Value != "") b = Math.Min(len - 1, long.Parse(m.Groups[2].Value)); }
+                        else if (m.Groups[2].Value != "") { a = Math.Max(0, len - long.Parse(m.Groups[2].Value)); }
+                    }
+                    string ext = Path.GetExtension(f).ToLowerInvariant();
+                    string type = ext == ".webm" || ext == ".mkv" ? "video/webm" : ext == ".ogv" ? "video/ogg" : "video/mp4";
+                    body = new RangeStream(fs, a, b - a + 1); code = m != null && m.Success ? 206 : 200;
+                    hdr = "Content-Type: " + type + "\r\nAccept-Ranges: bytes\r\nContent-Length: " + (b - a + 1) + (code == 206 ? "\r\nContent-Range: bytes " + a + "-" + b + "/" + len : "") + "\r\nCache-Control: no-store";
+                }
+            }
+            catch { body = null; code = 404; }
+            form.BeginInvoke((Action)(() =>
+            {
+                try { e.Response = env.CreateWebResourceResponse(body ?? new MemoryStream(), code, code == 206 ? "Partial Content" : code == 200 ? "OK" : "Not Found", hdr); }
+                catch { }
+                finally { deferral.Complete(); }
+            }));
+        });
+    }
 
     // ---------- reprodução ----------
     static Panel mpvHost; static Process mpvProc; static NamedPipeClientStream mpvPipe; static StreamWriter mpvOut; static bool mpvFull;
@@ -216,7 +273,7 @@ input-default-bindings=yes
             "--sub-border-style=" + (bg == "box" ? "background-box" : "outline-and-shadow"), "--sub-back-color=" + (bg == "box" ? "#B0000000" : "#00000000"),
             "--sub-visibility=" + (Opt(c, "subOn", "true") == "False" ? "no" : "yes"),
         };
-        bool full = Opt(c, "videoFull", "true") != "False";
+        bool full = Opt(c, "videoFull", "false") == "True";
         form.Invoke((Action)(() =>
         {
             Stop();
@@ -226,6 +283,7 @@ input-default-bindings=yes
             a.Add("--"); a.Add(Q(file));
             if (full && !form.Full) { form.ToggleFull(); mpvFull = true; } else mpvFull = false;
             var psi = new ProcessStartInfo(exe, string.Join(" ", a)) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) };
+            MpvLog("play: " + exe + " " + psi.Arguments);
             mpvProc = Process.Start(psi); mpvProc.EnableRaisingEvents = true;
             var me = mpvProc; me.Exited += (s, e) => { try { form.BeginInvoke((Action)(() => { if (mpvProc == me) Stop(); })); } catch { } };
             GameOn = true; Post("game:on");

@@ -215,6 +215,7 @@ static partial class WebHost
         byte[] body = null;
         try { var st = e.Request.Content; if (st != null) { var ms = new MemoryStream(); st.CopyTo(ms); body = ms.ToArray(); } } catch { }
         // abrir jogo / escolher emulador nunca esperam na fila (capas e vídeos podem estar ocupando as threads)
+        if (url.Contains("/api/vfile?")) { ServeVideo(e, deferral); return; }
         bool urgent = url.Contains("/api/launch") || url.Contains("/api/setemu");
         Action work = () =>
         {

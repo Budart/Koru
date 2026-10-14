@@ -206,7 +206,7 @@ const catSid = () => (sys && !sys.virtual && sys.id) || '';
 const jsonOf = k => { try { return JSON.parse(covers[k] || '[]'); } catch (e) { return []; } };
 const userCats = sid => jsonOf('ucat|' + sid), deadCats = sid => jsonOf('dcat|' + sid);
 function saveKey(key, url) { if (url) covers[key] = url; else delete covers[key]; return api('/api/cover', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, url: url || '' }) }).catch(() => {}); }
-const catLabel = c => { if (!c) return 'Jogos'; const o = covers['lcat|' + catSid() + '|' + c]; return o || c; };
+const catLabel = c => { if (!c) return sys && sys.type === 'video' && !globalMode ? 'Vídeos' : 'Jogos'; const o = covers['lcat|' + catSid() + '|' + c]; return o || c; };
 function catTargets() {
   const base = (sys && sys.type === 'pc') ? ['', 'Ferramentas para jogos', 'Outros programas'] : ['Traduzidos', '', 'Hack / Mod', 'Homebrew / Port', 'Beta / Protótipo', 'Não licenciado'];
   const sid = catSid(), dead = deadCats(sid);
@@ -316,7 +316,8 @@ const isFavG = g => covers['fav|' + coverKey(g)] === '1';
 // monta os grupos (Favoritos, categorias, Ocultos) de uma lista de jogos
 let privOn = false;   // pasta privada de vídeos: só aparece quando revelada (Ctrl+Shift+H / L3+R3), até sair do console
 function makeGroups(match, noFav) {
-  match = match.filter(g => !g.priv || privOn);
+  const priv = privOn ? match.filter(g => g.priv).sort(sortCmp) : [];
+  match = match.filter(g => !g.priv);
   const sorter = (a, b) => (CATS.indexOf(ecat(a)) - CATS.indexOf(ecat(b))) || sortCmp(a, b);
   const favs = noFav ? [] : match.filter(g => !hidden.has(coverKey(g)) && isFavG(g)).sort(sortCmp);
   const vis = match.filter(g => !hidden.has(coverKey(g)) && (noFav || !isFavG(g))).sort(sorter);
@@ -324,6 +325,7 @@ function makeGroups(match, noFav) {
   const groups = [];
   if (favs.length) groups.push({ cat: '__fav', label: '⭐ Favoritos', items: favs, fav: true });
   vis.forEach(g => { const c = ecat(g); let gr = groups[groups.length - 1]; if (!gr || gr.cat !== c || gr.fav) groups.push(gr = { cat: c, label: catLabel(c), items: [] }); gr.items.push(g); });
+  if (priv.length) groups.push({ cat: '__priv', label: '🔒 Ocultos', items: priv });
   if (hid.length) groups.push({ cat: '__hidden', label: 'Ocultos', items: hid, hid: true });
   return { groups, nvis: favs.length + vis.length, grouped: vis.some(g => ecat(g)) || hid.length > 0 || favs.length > 0 };
 }

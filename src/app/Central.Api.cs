@@ -19,6 +19,29 @@ using Microsoft.Win32;
 // Koru — rotas da API usada pela página (/api/...)
 static partial class Central
 {
+    // vídeo pedido pela página: só arquivos dentro das pastas do console de vídeos
+    static readonly bool vfInit = InitVideoFile();
+    static bool InitVideoFile()
+    {
+        WebHost.VideoFileOf = (cid, rel) =>
+        {
+            try
+            {
+                var cfg = LoadConfig(); string root = Root(cfg);
+                var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == cid); if (c == null || !IsVideo(c)) return null;
+                string vf = Full(root, rel ?? "");
+                return File.Exists(vf) && AllDirs(c).Any(rd => vf.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) ? vf : null;
+            }
+            catch { return null; }
+        };
+        return true;
+    }
+    static string SrtToVtt(string t)
+    {
+        t = t.Replace("\r\n", "\n").TrimStart('\uFEFF');
+        if (t.StartsWith("WEBVTT")) return t;
+        return "WEBVTT\n\n" + Regex.Replace(t, @"(\d{2}:\d{2}:\d{2}),(\d{3})", "$1.$2");
+    }
     static void Handle(Ctx ctx)
     {
         try
@@ -163,6 +186,43 @@ static partial class Central
             {
                 if (req.HttpMethod == "POST") WebHost.MpvInstall();
                 SendJson(ctx, new Dictionary<string, object> { { "installed", WebHost.MpvExe() != null }, { "busy", WebHost.MpvBusy }, { "progress", WebHost.MpvProgress }, { "step", WebHost.MpvStep }, { "error", WebHost.MpvError } });
+            }
+            else if (path == "/api/vsubs")
+            {
+                // legendas externas ao lado do vídeo (mesmo nome, ex.: Filme.pt-BR.srt)
+                string vf = WebHost.VideoFileOf(req.QueryString["c"], req.QueryString["p"]); var list = new List<object>();
+                if (vf != null)
+                {
+                    string bn = Path.GetFileNameWithoutExtension(vf);
+                    foreach (var f in Directory.GetFiles(Path.GetDirectoryName(vf)))
+                    {
+                        string e = Path.GetExtension(f).ToLowerInvariant(), n = Path.GetFileNameWithoutExtension(f);
+                        if ((e == ".srt" || e == ".vtt") && n.StartsWith(bn, StringComparison.OrdinalIgnoreCase))
+                        { string lab = n.Substring(bn.Length).Trim('.', ' ', '_', '-'); list.Add(new Dictionary<string, object> { { "name", lab == "" ? "Legenda" : lab }, { "file", Path.GetFileName(f) } }); }
+                    }
+                }
+                SendJson(ctx, list);
+            }
+            else if (path == "/api/vsub")
+            {
+                string vf = WebHost.VideoFileOf(req.QueryString["c"], req.QueryString["p"]), fn = Path.GetFileName(req.QueryString["f"] ?? "");
+                string sf = vf == null || fn == "" ? null : Path.Combine(Path.GetDirectoryName(vf), fn);
+                if (sf == null || !File.Exists(sf)) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                var raw = File.ReadAllBytes(sf); string txt;
+                try { txt = new UTF8Encoding(false, true).GetString(raw); } catch { txt = Encoding.GetEncoding(1252).GetString(raw); }   // legendas antigas costumam vir em ANSI
+                Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(SrtToVtt(txt)));
+            }
+            else if (path == "/api/vplayer" && req.HttpMethod == "POST")
+            {
+                // player avançado (mpv): upscaling e formatos que o player da página não toca
+                string bodyText; using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) bodyText = sr.ReadToEnd();
+                var body = (Dictionary<string, object>)Json.DeserializeObject(bodyText);
+                var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == S(body, "console"));
+                string vf = WebHost.VideoFileOf(S(body, "console"), S(body, "path"));
+                if (c == null || vf == null) { SendJson(ctx, Err("Vídeo inválido"), 400); return; }
+                var c2 = new Dictionary<string, object>(c); if (S(body, "upscale") != "") c2["upscale"] = S(body, "upscale"); if (S(body, "aspect") != "") c2["aspect"] = S(body, "aspect");
+                string er = WebHost.Play(vf, c2);
+                SendJson(ctx, er == null ? new Dictionary<string, object> { { "ok", true } } : Err(er), er == null ? 200 : 400);
             }
             else if (path == "/api/vthumb")
             {

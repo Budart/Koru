@@ -119,6 +119,7 @@ document.addEventListener('mousedown', () => { if (topSel >= 0) topMark(-1); }, 
 /* ---------- controles: teclado + gamepad ---------- */
 function input(a) {
   if (gameOn) return;   // jogo aberto: comandos só voltam quando ele fecha
+  if (VP.open) { vpInput(a); return; }
   if (oskOpen) { oskInput(a); return; }
   if (ARTPICK.open) { apInput(a); return; }
   if (askOpen) { askPad(a); return; }
@@ -172,6 +173,7 @@ function input(a) {
   }
 }
 document.addEventListener('keydown', e => {
+  if (VP.open) { vpKey(e); return; }
   if (gameOn) { e.preventDefault(); return; }
   { const ae = document.activeElement, typing = ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && !/checkbox|radio|range/.test(ae.type)));
     if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.altKey && !e.metaKey && !typing && !oskOpen && !renaming) { e.preventDefault(); setMute(!muted); return; } }   // M: liga/desliga o som em qualquer tela

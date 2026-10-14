@@ -206,9 +206,4 @@ async function mpvReady(interactive) {
     toast(`${st.step || 'Baixando...'} ${st.progress || 0}%`);
   }
 }
-async function playVideo(g) {
-  if (!await mpvReady(true)) return false;
-  sfx('launch'); music.pause();
-  try { await api('/api/launch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid || sys.id, path: g.path }) }); return true; }
-  catch (e) { toast(e.message, true); return false; }
-}
+async function playVideo(g) { sfx('ok'); openVPlayer(g); return true; }

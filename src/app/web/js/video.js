@@ -18,7 +18,7 @@ function setVidPlay(on) {
   el.style.transition = 'transform .7s cubic-bezier(.22,.8,.24,1)'; el.style.transform = '';
   setTimeout(() => { el.style.transition = ''; el.style.transformOrigin = ''; }, 750);
 }
-function stopVideo() { $('vidBox').classList.remove('loading'); clearTimeout(vidTimer); vidFor = null; setVidPlay(false); document.querySelectorAll('#vidBox .vid').forEach(v => { v.classList.remove('on'); setTimeout(() => v.remove(), 600); }); }
+function stopVideo() { if (typeof vpPrevStop === 'function') vpPrevStop(); $('vidBox').classList.remove('loading'); clearTimeout(vidTimer); vidFor = null; setVidPlay(false); document.querySelectorAll('#vidBox .vid').forEach(v => { v.classList.remove('on'); setTimeout(() => v.remove(), 600); }); }
 function vqReveal(f) { if (!f.isConnected || f.classList.contains('on') || !vidFor) return; diag('exibido'); f.classList.add('on'); setVidPlay(true); $('vidBox').classList.remove('loading'); }
 // comandos para o player do YouTube (sem carregar a biblioteca deles)
 const ytCmd = (f, func, args) => { try { f.contentWindow.postMessage(JSON.stringify({ event:'command', func, args: args || [] }), '*'); } catch (e) {} };
@@ -59,7 +59,7 @@ function playCandidate(g, list, k) {
   $('vidBox').classList.add('loading'); $('vidBox').appendChild(f);
 }
 function queueVideo(g) {
-  stopVideo();
+  stopVideo(); if (typeof vpPrev === 'function') vpPrev(g);
   if (bgKind !== 'video' || !document.hasFocus() || SMALL.matches || ((sysOf(g) || {}).type === 'video')) return;   // janela pequena: sem vídeo (economia)
   vidFor = g;
   vidTimer = setTimeout(async () => {   // espera o usuário "parar" no jogo (evita carregar vídeos ao rolar a lista)

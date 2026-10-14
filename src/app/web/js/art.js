@@ -274,7 +274,9 @@ function buildCase(g, url, back, ratio) {
   const base = CASES[sys.type === 'pc' ? 'pc' : sys.id] || { r:.72, d:.1, spine:'#222', txt:'#ddd', rim:0 };
   const gen = base.txt;   // cor da capa genérica
   const c = Object.assign({}, base, { spine:'#0b0b0b', txt:'#fff', rimc:'#0b0b0b', rim: base.rim || .02 });
-  if (url && ratio) c.r = Math.max(.45, Math.min(2.2, ratio));   // formato real da capa (varia por país/versão)   // bordas pretas, texto branco
+  if (url && ratio) c.r = Math.max(.45, Math.min(2.2, ratio));
+  const vhs = sys.type === 'video';   // filmes e vídeos: fita VHS (formato fixo)
+  if (vhs) Object.assign(c, { r: 1.78, d: .2, rim: 0, rimc: '#121212' });   // formato real da capa (varia por país/versão)   // bordas pretas, texto branco
   const area = $('art').getBoundingClientRect();
   const small = area.width < 400, fh = small ? .8 : .52, fw = small ? .78 : .45;
   const H = Math.max(60, Math.min(area.height * fh, area.width * fw / c.r)), W = H * c.r, D = Math.max(small ? 8 : 14, H * Math.max(c.d, .12));
@@ -292,7 +294,7 @@ function buildCase(g, url, back, ratio) {
   const coverStyle = `background:radial-gradient(120% 80% at 15% 10%, hsla(${hue2},90%,65%,.55), transparent 60%), radial-gradient(90% 70% at 90% 95%, hsla(${hue},85%,55%,.5), transparent 65%), linear-gradient(155deg, hsl(${hue},55%,22%) 0%, hsl(${hue2},45%,12%) 60%, #07080d 100%);`;
   const tex = url ? `<div class="tex" style="position:absolute;inset:0;background:url('${url.replace(/'/g, "%27")}') center/cover no-repeat"></div>` : '';
   const inner = `<div class="generic" style="position:absolute;inset:0;color:#fff"><div class="gx"></div><div class="glg"><img class="lg" src="${logoUrl(sys)}" alt=""></div><img class="ct" src="${ART}controllers/${sys.art}.svg" alt=""><div class="gb"><div class="gt" style="font-size:${px(Math.max(13, W * .095))}">${esc(cleanTitle(dn(g)) || dn(g))}</div><div class="gs" style="font-size:${px(Math.max(8, W * .038))}">${esc(sys.name || '')}</div></div></div>`;
-  const edge = 'var(--edge, #0b0b0b)';   // cor principal da capa (calculada da imagem), preto enquanto não sabe
+  const edge = vhs ? '#141414' : 'var(--edge, #0b0b0b)';   // cor principal da capa (calculada da imagem), preto enquanto não sabe
   if (coverStyle2d) {   // 2D: encarte esticado — lombada (logo/nome deitados) encostada na frente, moldura preta
     const S = Math.max(small ? 14 : 22, W * .11), F = Math.max(4, Math.round(H * .025));
     return `<div class="cw c2d"><div class="flip${back ? ' back' : ''}"><div class="flat2d" style="--fr:${F}px">` +
@@ -313,7 +315,8 @@ function buildCase(g, url, back, ratio) {
     }
   });
   return `<div class="cw" style="transform:${scaleTf()}"><div class="rot" style="transform:${viewTf()};transform-style:preserve-3d"><div class="flip${back ? ' back' : ''}"><div class="case3d" style="width:${px(W)};height:${px(H)};animation-delay:${swayPhase()}">` +
-    face('front', W, H, `translateZ(${px(D / 2)})`, rimStyle + `background-color:var(--edge, ${c.rimc});`, `<div style="position:absolute;inset:0;background-size:cover;background-position:center;${coverStyle}"></div>${inner}${tex}`) +
+    (vhs ? face('front vhsf', W, H, `translateZ(${px(D / 2)})`, `background:#141414;border-radius:${R}px;`, vhsFront(g, W, H, coverStyle, tex)) :
+    face('front', W, H, `translateZ(${px(D / 2)})`, rimStyle + `background-color:var(--edge, ${c.rimc});`, `<div style="position:absolute;inset:0;background-size:cover;background-position:center;${coverStyle}"></div>${inner}${tex}`)) +
     face('back', W, H, `rotateY(180deg) translateZ(${px(D / 2)})`, `background:${edge};border-radius:${R}px;`) +
     face('spine', D + O, H - 2 * R + O, `rotateY(-90deg) translateZ(${px(W / 2)})`, `--sh:${px((H - 2 * R) * .85)};--sw:${px(D * .8)};background:${edge};`, spineHtml) +
     face('side', D + O, H - 2 * R + O, `rotateY(90deg) translateZ(${px(W / 2)})`, `background:${edge};`) +
@@ -322,6 +325,12 @@ function buildCase(g, url, back, ratio) {
     corners +
     [-.25, 0, .25].map(z => face('core', W - 2, H - 2, `translateZ(${px(D * z)})`, `background:${edge};border-radius:${R}px;backface-visibility:visible;`)).join('') +
     `</div></div></div></div>`;
+}
+// frente da fita VHS: etiqueta com a imagem do vídeo, janela com os dois rolos e detalhes do plástico
+function vhsFront(g, W, H, coverStyle, tex) {
+  const t = esc(cleanTitle(dn(g)) || dn(g)), fs = Math.max(11, W * .045);
+  return `<div class="vhs"><div class="vlab"><div class="generic" style="position:absolute;inset:0;${coverStyle}"><div class="vgt" style="font-size:${(fs * 1.4).toFixed(1)}px">${t}</div></div>${tex}<div class="vband"><span style="font-size:${fs.toFixed(1)}px">${t}</span><b>VHS</b></div></div>` +
+    `<div class="vwin"><i class="reel l"></i><i class="reel r"></i><b class="tape"></b></div><i class="vscrew a"></i><i class="vscrew b"></i><i class="vgrip"></i></div>`;
 }
 let artReq = 0, lastArt = null;
 // fundo automático do jogo (quando a capa não trouxe um): SteamGridDB (heroes) > Steam (library_hero) > tela/título do jogo (libretro)
