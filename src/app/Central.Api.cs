@@ -222,6 +222,22 @@ static partial class Central
             }
             else if (path == "/api/fsarg")
                 SendJson(ctx, new Dictionary<string, object> { { "arg", FullscreenArg(Full(root, req.QueryString["emu"] ?? "")) } });
+            else if (path == "/api/aud" && req.HttpMethod == "POST")
+            {
+                // som nativo pelo mpv (formatos que o player da página não toca): start / cmd / stop / pos
+                string bodyText; using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) bodyText = sr.ReadToEnd();
+                var body = (Dictionary<string, object>)Json.DeserializeObject(bodyText); string op = S(body, "op"); var inv = System.Globalization.CultureInfo.InvariantCulture;
+                if (op == "start")
+                {
+                    string vf = WebHost.VideoFileOf(S(body, "c"), S(body, "p"));
+                    if (vf == null) { SendJson(ctx, Err("Vídeo inválido"), 400); return; }
+                    string er = WebHost.AudStart(vf, int.Parse(S(body, "k")), double.Parse(S(body, "t"), inv), double.Parse(S(body, "vol"), inv), S(body, "paused") == "true");
+                    SendJson(ctx, er == null ? new Dictionary<string, object> { { "ok", true } } : Err(er));
+                }
+                else if (op == "cmd") { WebHost.AudCmd((object[])body["cmd"]); SendJson(ctx, new Dictionary<string, object> { { "ok", true } }); }
+                else if (op == "stop") { WebHost.AudStop(); SendJson(ctx, new Dictionary<string, object> { { "ok", true } }); }
+                else SendJson(ctx, new Dictionary<string, object> { { "pos", WebHost.AudPos } });
+            }
             else if (path == "/api/ffmpeg")
             {
                 if (req.HttpMethod == "POST") WebHost.FfInstall();
@@ -336,7 +352,7 @@ static partial class Central
                 var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == S(body, "console"));
                 string vf = WebHost.VideoFileOf(S(body, "console"), S(body, "path"));
                 if (c == null || vf == null) { SendJson(ctx, Err("Vídeo inválido"), 400); return; }
-                var c2 = new Dictionary<string, object>(c); if (S(body, "aid") != "") c2["aid"] = S(body, "aid"); if (S(body, "start") != "") c2["start"] = S(body, "start"); if (S(body, "upscale") != "") c2["upscale"] = S(body, "upscale"); if (S(body, "aspect") != "") c2["aspect"] = S(body, "aspect");
+                var c2 = new Dictionary<string, object>(c); if (S(body, "aid") != "") c2["aid"] = S(body, "aid"); if (S(body, "embed") != "") c2["embed"] = S(body, "embed"); if (S(body, "start") != "") c2["start"] = S(body, "start"); if (S(body, "upscale") != "") c2["upscale"] = S(body, "upscale"); if (S(body, "aspect") != "") c2["aspect"] = S(body, "aspect");
                 string er = WebHost.Play(vf, c2);
                 SendJson(ctx, er == null ? new Dictionary<string, object> { { "ok", true } } : Err(er), er == null ? 200 : 400);
             }

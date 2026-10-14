@@ -41,25 +41,25 @@ function vpEl() {
   const v = $('vpV');
   el.querySelectorAll('[data-a]').forEach(b => b.onclick = e => { e.stopPropagation(); vpAct(b.dataset.a); });
   v.onclick = () => vpAct('play'); v.ondblclick = () => vpAct('full');
-  v.onplay = v.onpause = () => { $('vpPlay').innerHTML = v.paused ? VP_ICO.play : VP_ICO.pause; el.classList.toggle('paused', v.paused); vpShow(); };
-  v.ontimeupdate = vpPaint; v.onprogress = vpPaint; v.onvolumechange = () => { $('vpMute').innerHTML = v.muted || v.volume === 0 ? VP_ICO.mute : VP_ICO.vol; $('vpVol').value = v.muted ? 0 : v.volume; try { localStorage.setItem('vpvol', v.volume); localStorage.setItem('vpmute', v.muted ? '1' : ''); } catch (e) {} };
-  v.onloadedmetadata = () => { vpLayout(); if (!v.videoWidth) vpFail(); };
-  v.onerror = () => vpFail();
+  v.onplay = v.onpause = () => { const x = VPV(); $('vpPlay').innerHTML = x.paused ? VP_ICO.play : VP_ICO.pause; el.classList.toggle('paused', x.paused); vpShow(); };
+  v.ontimeupdate = vpPaint; v.onprogress = vpPaint; v.onvolumechange = () => { const x = VPV(); $('vpMute').innerHTML = x.muted || x.volume === 0 ? VP_ICO.mute : VP_ICO.vol; $('vpVol').value = x.muted ? 0 : x.volume; try { localStorage.setItem('vpvol', x.volume); localStorage.setItem('vpmute', x.muted ? '1' : ''); } catch (e) {} };
+  v.onloadedmetadata = () => { vpLayout(); if (!VPM && !v.videoWidth) vpFail(); };
+  v.onerror = () => { if (!VPM && VP.open && v.getAttribute('src')) vpFail(); };
   v.onended = () => { try { localStorage.removeItem('vpos|' + coverKey(VP.g)); } catch (e) {} if (vpNextOf(VP.g)) vpAct('next'); else vpClose(); };
-  $('vpVol').oninput = () => { v.volume = +$('vpVol').value; v.muted = v.volume === 0; };
-  const sk = $('vpSeek'), at = e => { const r = sk.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (v.duration || 0); };
+  $('vpVol').oninput = () => { const x = VPV(); x.volume = +$('vpVol').value; x.muted = x.volume === 0; };
+  const sk = $('vpSeek'), at = e => { const r = sk.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (VPV().duration || 0); };
   let drag = false;
-  sk.onpointerdown = e => { drag = true; sk.setPointerCapture(e.pointerId); v.currentTime = at(e); vpPaint(); };
-  sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { v.currentTime = t; vpPaint(); } };
+  sk.onpointerdown = e => { drag = true; sk.setPointerCapture(e.pointerId); VPV().currentTime = at(e); vpPaint(); };
+  sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { VPV().currentTime = t; vpPaint(); } };
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
   el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
-  window.addEventListener('resize', () => { if (VP.open) vpLayout(); });
+  window.addEventListener('resize', () => { if (VP.open) { vpLayout(); vpMpvRect(); } });
   return el;
 }
 async function openVPlayer(g) {
   const el = vpEl(), v = $('vpV'), s = sysOf(g) || {};
-  vpPrevStop(); VP.open = true; VP.g = g; VP.s = s; VP.sub = -1; VP.aspect = Math.max(0, VP_ASPECTS.findIndex(a => a[0] === (s.aspect || 'auto')));
+  vpPrevStop(); vpMpvStop(); VP.open = true; VP.g = g; VP.s = s; VP.sub = -1; VP.aspect = Math.max(0, VP_ASPECTS.findIndex(a => a[0] === (s.aspect || 'auto')));
   $('vpTitle').textContent = dn(g); $('vpMsg').textContent = ''; el.classList.remove('fail');
   try { v.volume = +(localStorage.getItem('vpvol') || 1); v.muted = !!localStorage.getItem('vpmute'); } catch (e) {}
   vpSubStyle(s);
@@ -71,7 +71,7 @@ async function openVPlayer(g) {
   VP.zoom = 1; VP.zx = 0; VP.zy = 0; vpZoomApply();
   el.classList.add('on'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
-  clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
+  clearInterval(VP.saveT); VP.saveT = setInterval(() => { const x = VPV(); if (VP.open && x.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), x.currentTime); } catch (e) {} }, 4000);
   VP.auds = []; VP.aud = 0; $('vpAud').style.display = 'none';
   api(vpUrl(g, 'vaudio')).then(l => { if (!VP.open || VP.g !== g) return; VP.auds = l || []; if (!VP.auds.length) return;
     $('vpAud').style.display = VP.auds.length > 1 || !VP.auds[0].ok ? '' : 'none';
@@ -101,23 +101,23 @@ function vpFail() {
   $('vpHq').onclick = () => vpAct('hq');
 }
 function vpClose() {
-  if (!VP.open) return; const v = $('vpV');
+  if (!VP.open) return; const v = VPV();
   if (v.currentTime > 5 && v.duration && v.currentTime < v.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v.currentTime); } catch (e) {}
-  vpTxStop(); v.pause(); v.removeAttribute('src'); v.load(); clearInterval(VP.saveT);
+  vpMpvStop(); { const r = $('vpV'); r.pause(); r.removeAttribute('src'); r.load(); } clearInterval(VP.saveT);
   VP.open = false; $('vplayer').classList.remove('on');
   if (host && document.body.classList.contains('vpfull')) { document.body.classList.remove('vpfull'); host.postMessage('fs'); }
   sfx('back');
 }
-function vpShow() { const el = $('vplayer'); if (!el) return; el.classList.add('ui'); clearTimeout(VP.hideT); VP.hideT = setTimeout(() => { if (!$('vpV').paused && !el.querySelector('.vpmenu.on')) el.classList.remove('ui'); }, 2600); }
+function vpShow() { const el = $('vplayer'); if (!el) return; el.classList.add('ui'); clearTimeout(VP.hideT); VP.hideT = setTimeout(() => { if (!VPV().paused && !el.querySelector('.vpmenu.on')) el.classList.remove('ui'); }, 2600); }
 function vpPaint() {
-  const v = $('vpV'), d = v.duration || 0, t = v.currentTime || 0;
+  const v = VPV(), d = v.duration || 0, t = v.currentTime || 0;
   $('vpProg').style.width = d ? (t / d * 100) + '%' : '0'; $('vpKnob').style.left = d ? (t / d * 100) + '%' : '0';
   try { const b = v.buffered; if (b.length && d) $('vpBuf').style.width = (b.end(b.length - 1) / d * 100) + '%'; } catch (e) {}
   $('vpTime').textContent = vpFmt(t) + ' / ' + vpFmt(d);
 }
-function vpVolume(dv) { const v = $('vpV'); v.muted = false; v.volume = Math.max(0, Math.min(1, v.volume + dv)); vpOsd('Volume ' + Math.round(v.volume * 100) + '%'); }
-function vpSeek(dt) { const v = $('vpV'); v.currentTime = Math.max(0, Math.min((v.duration || 0) - .5, v.currentTime + dt)); vpShow(); vpPaint(); }
-function vpOsd(t) { const m = $('vpMsg'); if ($('vplayer').classList.contains('fail')) return; m.textContent = t; m.classList.add('on'); clearTimeout(vpOsd.t); vpOsd.t = setTimeout(() => m.classList.remove('on'), 1200); }
+function vpVolume(dv) { const v = VPV(); v.muted = false; v.volume = Math.max(0, Math.min(1, v.volume + dv)); vpOsd('Volume ' + Math.round(v.volume * 100) + '%'); }
+function vpSeek(dt) { const v = VPV(); v.currentTime = Math.max(0, Math.min((v.duration || 0) - .5, v.currentTime + dt)); vpShow(); vpPaint(); }
+function vpOsd(t) { if (VPM) { VPM.v.cmd('show-text', t, 1500); return; } const m = $('vpMsg'); if ($('vplayer').classList.contains('fail')) return; m.textContent = t; m.classList.add('on'); clearTimeout(vpOsd.t); vpOsd.t = setTimeout(() => m.classList.remove('on'), 1200); }
 function vpAspect(d) { VP.aspect = (VP.aspect + d + VP_ASPECTS.length) % VP_ASPECTS.length; $('vpAsp').querySelector('span').textContent = VP_ASPECTS[VP.aspect][1]; vpLayout(); if (d) vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
 function vpLayout() {
   const box = $('vplayer').querySelector('.vpbox'), v = $('vpV'), k = VP_ASPECTS[VP.aspect][0], fr = $('vplayer').querySelector('.vpframe').getBoundingClientRect(), W = fr.width, H = fr.height;
@@ -317,62 +317,55 @@ function vpAudMenu() {
   m.querySelectorAll('[data-k]').forEach(el => el.onclick = e => { e.stopPropagation(); m.classList.remove('on'); vpSetAud(+el.dataset.k, true); });
 }
 
-/* ---------- Dolby Digital (Plus) / TrueHD / DTS: o Koru converte só o áudio em pedaços (FFmpeg) e toca junto com o vídeo ---------- */
+/* ---------- Dolby Digital (Plus) / Atmos / TrueHD / DTS: som nativo — o mpv decodifica e toca o áudio original,
+   sincronizado com o vídeo do player do Koru (sem conversão) ---------- */
 let vpTx = null;
-async function ffReady() {
-  let st; try { st = await api('/api/ffmpeg'); } catch (e) { return false; }
+const audPost = b => api('/api/aud', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) });
+async function mpvAuto() {   // baixa o mpv sozinho na primeira vez (uma vez só)
+  let st; try { st = await api('/api/mpv'); } catch (e) { return false; }
   if (st.installed && !st.busy) return true;
-  if (!st.busy) { vpOsd('Baixando o conversor de áudio (uma vez só)…'); try { st = await api('/api/ffmpeg', { method:'POST' }); } catch (e) { return false; } }
+  if (!st.busy) { vpOsd('Preparando o som Dolby/DTS (uma vez só)…'); try { st = await api('/api/mpv', { method:'POST' }); } catch (e) { return false; } }
   while (true) {
     await new Promise(r => setTimeout(r, 800));
-    try { st = await api('/api/ffmpeg'); } catch (e) { return false; }
-    if (st.error) { toast('Não foi possível baixar o conversor de áudio: ' + st.error, true); return false; }
+    try { st = await api('/api/mpv'); } catch (e) { return false; }
+    if (st.error) { toast('Não foi possível preparar o som: ' + st.error, true); return false; }
     if (!st.busy) return !!st.installed;
     if (VP.open) vpOsd(`${st.step || 'Baixando…'} ${st.progress || 0}%`);
   }
 }
 function vpTxStop() {
-  if (!vpTx) return; const t = vpTx; vpTx = null; t.dead = true;
-  try { t.a.pause(); t.a.removeAttribute('src'); t.a.load(); } catch (e) {} clearInterval(t.sync);
-  const v = $('vpV'); ['seeking', 'play', 'pause', 'ratechange', 'volumechange'].forEach(ev => v.removeEventListener(ev, t.h[ev]));
+  if (!vpTx) return; const t = vpTx; vpTx = null; t.dead = true; clearInterval(t.sync);
+  const v = $('vpV'); ['seeked', 'play', 'pause', 'ratechange', 'volumechange'].forEach(ev => v.removeEventListener(ev, t.h[ev]));
+  audPost({ op: 'stop' }).catch(() => {});
 }
 async function vpTxStart(k) {
   const g = VP.g, v = $('vpV'), x = VP.auds[k];
-  vpOsd('Áudio ' + x.codec + ': preparando…');
-  if (!await ffReady() || !VP.open || VP.g !== g || VP.aud !== k) return;
-  const at = v.audioTracks; if (at && at.length) for (let i = 0; i < at.length; i++) at[i].enabled = false;   // o vídeo fica sem som; o áudio convertido toca à parte
-  const type = MediaSource.isTypeSupported('audio/aac') ? 'audio/aac' : null;
-  if (!type) { vpOsd('Este sistema não aceita o áudio convertido'); return; }
-  const a = new Audio(), ms = new MediaSource(); a.src = URL.createObjectURL(ms);
-  const t = vpTx = { a, ms, sb: null, k, g, busy: false, next: 0, gen: 0, dead: false, h: {} };
-  const SEG = 20;
-  await new Promise(r => ms.addEventListener('sourceopen', r, { once: true }));
-  if (t.dead) return;
-  t.sb = ms.addSourceBuffer(type); t.sb.mode = 'segments';
-  const mirror = () => { a.volume = v.volume; a.muted = v.muted; a.playbackRate = v.playbackRate; };
-  const buffered = pos => { const b = t.sb.buffered; for (let i = 0; i < b.length; i++) if (pos >= b.start(i) - .3 && pos < b.end(i) - .5) return b.end(i); return -1; };
-  const fill = async () => {
-    if (t.dead || t.busy) return; const pos = v.currentTime, end = buffered(pos);
-    let from = end >= 0 ? end : pos; if (end >= 0 && end - pos > 60) return;   // já tem 1 min à frente
-    t.busy = true; const gen = t.gen;
-    try {
-      const r = await fetch(vpUrl(g, 'vaseg', `&k=${k}&t=${from.toFixed(3)}&d=${SEG}`)); if (!r.ok) throw 0;
-      const buf = await r.arrayBuffer(); if (t.dead || gen !== t.gen) { t.busy = false; return; }
-      await new Promise(res => { const done = () => { t.sb.removeEventListener('updateend', done); res(); }; t.sb.addEventListener('updateend', done); try { t.sb.timestampOffset = from; t.sb.appendBuffer(buf); } catch (e) { res(); } });
-      if (Math.abs(a.currentTime - v.currentTime) > .3) a.currentTime = v.currentTime;
-      if (!v.paused && a.paused) a.play().catch(() => {});
-    } catch (e) {}
-    t.busy = false; if (!t.dead && gen === t.gen) setTimeout(fill, 50);
-  };
-  t.h.seeking = () => { t.gen++; t.busy = false; try { if (!t.sb.updating && t.sb.buffered.length && buffered(v.currentTime) < 0) t.sb.remove(0, Infinity); } catch (e) {} a.currentTime = v.currentTime; setTimeout(fill, 30); };
-  t.h.play = () => { a.currentTime = v.currentTime; a.play().catch(() => {}); };
-  t.h.pause = () => a.pause();
-  t.h.ratechange = mirror; t.h.volumechange = mirror;
-  ['seeking', 'play', 'pause', 'ratechange', 'volumechange'].forEach(ev => v.addEventListener(ev, t.h[ev]));
-  mirror(); a.currentTime = v.currentTime; fill();
-  t.sync = setInterval(() => {   // mantém áudio e vídeo juntos e o buffer cheio
-    if (t.dead) return; if (!v.paused && a.paused && buffered(v.currentTime) >= 0) a.play().catch(() => {});
-    if (Math.abs(a.currentTime - v.currentTime) > .25) a.currentTime = v.currentTime; fill();
-  }, 1000);
+  vpOsd('Áudio ' + x.codec + '…');
+  if (!await mpvAuto() || !VP.open || VP.g !== g || VP.aud !== k) return;
+  const at = v.audioTracks; if (at && at.length) for (let i = 0; i < at.length; i++) at[i].enabled = false;   // o som vem do mpv
+  const vol = () => v.muted ? 0 : Math.round(v.volume * 100);
+  const t = vpTx = { k, g, dead: false, h: {}, speed: 1 };
+  const r = await audPost({ op: 'start', c: g.sid || (sysOf(g) || {}).id, p: g.path, k: String(k), t: String(v.currentTime + .25), vol: String(vol()), paused: String(v.paused) }).catch(e => ({ error: e.message }));
+  if (r.error) { vpOsd('Não foi possível tocar este áudio: ' + r.error); vpTx = null; return; }
+  const cmd = c => audPost({ op: 'cmd', cmd: c }).catch(() => {});
+  t.h.seeked = () => cmd(['seek', v.currentTime, 'absolute+exact']);
+  t.h.play = () => { cmd(['seek', v.currentTime, 'absolute+exact']); cmd(['set_property', 'pause', false]); };
+  t.h.pause = () => cmd(['set_property', 'pause', true]);
+  t.h.ratechange = () => cmd(['set_property', 'speed', v.playbackRate]);
+  t.h.volumechange = () => cmd(['set_property', 'volume', vol()]);
+  ['seeked', 'play', 'pause', 'ratechange', 'volumechange'].forEach(ev => v.addEventListener(ev, t.h[ev]));
+  // sincronia: diferença pequena = ajusta a velocidade de leve; grande = reposiciona o som
+  t.sync = setInterval(async () => {
+    if (t.dead || v.paused) return;
+    let p; try { p = (await audPost({ op: 'pos' })).pos; } catch (e) { return; }
+    if (t.dead || p == null || p < 0) return;
+    const d = p - v.currentTime;
+    if (Math.abs(d) > .35) { cmd(['seek', v.currentTime + .05, 'absolute+exact']); t.speed = 1; cmd(['set_property', 'speed', v.playbackRate]); }
+    else { const sp = Math.abs(d) < .03 ? 1 : Math.max(.95, Math.min(1.05, 1 - d * .6)); if (Math.abs(sp - t.speed) > .004) { t.speed = sp; cmd(['set_property', 'speed', +(v.playbackRate * sp).toFixed(4)]); } }
+  }, 700);
   vpOsd('Áudio: ' + x.name + ' · ' + x.codec);
 }
+
+// o vídeo é sempre o do player da página; o som que ele não toca vem do mpv (ver vpTxStart)
+const VPV = () => $('vpV'); const VPM = null;
+function vpMpvStop() {} function vpMpvRect() {}
