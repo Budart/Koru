@@ -826,7 +826,7 @@ body.crt .trt { display:none; } body.crt .trbtn { padding-right:8px; }
 @keyframes vreel { to { transform:translateY(-50%) rotate(360deg); } }
 
 /* ---- prévia do vídeo no fundo da lista ---- */
-#vprev { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 1.2s ease; z-index:1; pointer-events:none; }
+#vprev { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; opacity:0; transition:opacity 1.2s ease; z-index:1; pointer-events:none; }
 #vprev.on { opacity:1; }
 
 /* ---- player de vídeo ---- */
@@ -867,3 +867,4 @@ body.vprevon #vidBox { opacity:0 !important; pointer-events:none; }
 #vpFlash { position:absolute; left:50%; top:50%; width:96px; height:96px; margin:-48px 0 0 -48px; border-radius:50%; background:rgba(10,12,18,.55); display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; opacity:0; } #vpFlash svg { width:52px; height:52px; fill:#f1ece3; } #vpFlash.go { animation:vpFlash .5s ease-out forwards; } @keyframes vpFlash { 0% { opacity:1; transform:scale(.85); } 30% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.25); } }
 #vplayer .vpmi small { opacity:.55; font-size:11px; margin-left:6px; } #vplayer .vpmi.pick { border-top:1px solid rgba(255,255,255,.08); margin-top:4px; padding-top:10px; color:#9fbaff; } #vplayer .vpmenu { max-height:60vh; overflow:auto; }
 #vplayer .vpbar, #vplayer .vptop { z-index:5; } #vplayer .vpmi.pick { border:0; border-top:1px solid rgba(255,255,255,.08); border-radius:0 0 8px 8px; }
+#vpBriS { position:absolute; bottom:52px; transform:translateX(-50%); width:44px; height:170px; padding:10px 0 8px; border-radius:12px; background:rgba(20,22,28,.95); box-shadow:0 10px 30px rgba(0,0,0,.6); display:flex; flex-direction:column; align-items:center; gap:6px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:6; } #vpBriS.on { opacity:1; pointer-events:auto; } #vpBriS input { writing-mode:vertical-lr; direction:rtl; width:20px; height:120px; accent-color:#3D7BFF; } #vpBriS b { font-size:11px; font-weight:600; }

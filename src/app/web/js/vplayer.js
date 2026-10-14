@@ -27,7 +27,7 @@ function vpEl() {
   <div class="vpbar">
     <div class="vpseek" id="vpSeek"><div class="vpbuf" id="vpBuf"></div><div class="vpprog" id="vpProg"></div><div class="vpknob" id="vpKnob"></div><div class="vptip" id="vpTip"></div></div>
     <div class="vprow">
-      <button class="vpb" data-a="back" title="Voltar 10 s (←)">${VP_ICO.back}</button><button class="vpb big" data-a="play" id="vpPlay" title="Play/Pause (Espaço)">${VP_ICO.pause}</button><button class="vpb" data-a="fwd" title="Avançar 10 s (→)">${VP_ICO.fwd}</button><button class="vpb" data-a="next" id="vpNext" title="Próximo vídeo (N)">${VP_ICO.next}</button>
+      <button class="vpb" data-a="back" title="Voltar 10 s (←)">${VP_ICO.back}</button><button class="vpb big" data-a="play" id="vpPlay" title="Play/Pause (Espaço)">${VP_ICO.pause}</button><button class="vpb" data-a="fwd" title="Avançar 10 s (→)">${VP_ICO.fwd}</button><button class="vpb" data-a="next" id="vpNext" title="Próximo vídeo (Ctrl+→)">${VP_ICO.next}</button>
       <div class="vpvol"><button class="vpb" data-a="mute" id="vpMute" title="Mudo (M)">${VP_ICO.vol}</button><input type="range" id="vpVol" min="0" max="1" step="0.02" value="1"></div>
       <span class="vptime" id="vpTime">0:00 / 0:00</span><span class="vpgrow"></span>
       <div class="vpmenu-w"><button class="vpb" data-a="sub" title="Legendas (S)">${VP_ICO.sub}</button><div class="vpmenu" id="vpSubs"></div></div>
@@ -160,7 +160,7 @@ async function vpAct(a) {
   else if (a === 'sub') $('vpSubs').classList.toggle('on');
   else if (a === 'subnext') { const n = VP.subs.length; if (!n) { vpOsd('Sem legendas'); return; } let k = VP.sub + 1; while (k < n && VP.subs[k].text === false) k++; if (k >= n) k = -1; vpSetSub(k); vpOsd(k < 0 ? 'Legendas desligadas' : 'Legenda: ' + VP.subs[k].name); }
   else if (a === 'asp') vpAspect(1);
-  else if (a === 'bri') vpBri(1);
+  else if (a === 'bri') { vpBri(1); vpBriSlider(); }
   else if (a === 'full') { document.body.classList.toggle('vpfull'); if (host) host.postMessage('fs'); setTimeout(vpLayout, 300); }
   else if (a === 'close') vpClose();
   else if (a === 'max') { const el = $('vplayer'); el.classList.toggle('win'); el.classList.toggle('max', !el.classList.contains('win')); setTimeout(vpLayout, 260); }
@@ -186,8 +186,9 @@ function vpInput(a) {
      pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('next'), lt: () => vpZoom(1 / 1.1), rt: () => vpZoom(1.1) }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri',  n: 'next', N: 'next', Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', b: 'bri', B: 'bri',  Escape: 'close', Backspace: 'close' };
   e.preventDefault();
+  if (e.ctrlKey && k === 'ArrowRight') return vpAct('next');
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
   if (k === 'PageUp') return vpSeek(-60); if (k === 'PageDown') return vpSeek(60);
   if (e.ctrlKey && (k === '+' || k === '=')) return vpZoom(1.1); if (e.ctrlKey && k === '-') return vpZoom(1 / 1.1); if (e.ctrlKey && k === '0') return vpZoom(0);
@@ -222,7 +223,7 @@ function vpRelease() { try { if (VP.open) vpClose(); } catch (e) {} try { vpPrev
 const VP_BRI = [1, 1.2, 1.4, 1.6, 1.8];
 function vpBri(d) {
   if (d) { const i = VP_BRI.findIndex(x => Math.abs(x - VP.bri) < .01); VP.bri = VP_BRI[(i + 1) % VP_BRI.length]; try { localStorage.setItem('vbri|' + coverKey(VP.g), VP.bri); } catch (e) {} vpOsd('Brilho ' + Math.round(VP.bri * 100) + '%'); }
-  $('vpV').style.filter = VP.bri > 1 ? `brightness(${VP.bri}) contrast(${(1 + (VP.bri - 1) * .25).toFixed(2)}) saturate(${(1 + (VP.bri - 1) * .3).toFixed(2)})` : '';
+  $('vpV').style.filter = VP.bri !== 1 ? `brightness(${VP.bri}) contrast(${(1 + (VP.bri - 1) * .25).toFixed(2)}) saturate(${(1 + (VP.bri - 1) * .3).toFixed(2)})` : '';
   $('vpBri').querySelector('span').textContent = Math.round(VP.bri * 100) + '%';
 }
 
@@ -262,3 +263,20 @@ function videoFirstFrame(g) {
   });
   vFrames.set(k, pr); pr.then(u => { if (!u) vFrames.delete(k); }); return pr;
 }
+
+// slider de brilho: aparece acima do botão por alguns segundos
+function vpBriSlider() {
+  const b = $('vpBri'); let w = $('vpBriS');
+  if (!w) {
+    w = document.createElement('div'); w.id = 'vpBriS'; w.innerHTML = '<input type="range" min="0.6" max="2" step="0.05" orient="vertical"><b></b>';
+    b.parentNode.style.position = 'relative'; b.insertAdjacentElement('afterend', w);
+    const r = w.querySelector('input');
+    r.oninput = () => { VP.bri = +r.value; try { localStorage.setItem('vbri|' + coverKey(VP.g), VP.bri); } catch (e) {} vpBri(0); w.querySelector('b').textContent = Math.round(VP.bri * 100) + '%'; vpBriSlider.keep(); };
+    w.onpointerenter = () => clearTimeout(vpBriSlider.t); w.onpointerleave = () => vpBriSlider.keep();
+  }
+  const rb = b.getBoundingClientRect(), rp = b.offsetParent.getBoundingClientRect();
+  w.style.left = (rb.left - rp.left + rb.width / 2) + 'px';
+  w.querySelector('input').value = VP.bri; w.querySelector('b').textContent = Math.round(VP.bri * 100) + '%';
+  w.classList.add('on'); vpBriSlider.keep();
+}
+vpBriSlider.keep = () => { clearTimeout(vpBriSlider.t); vpBriSlider.t = setTimeout(() => { const w = $('vpBriS'); if (w) w.classList.remove('on'); }, 2500); };

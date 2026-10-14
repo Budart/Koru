@@ -205,7 +205,15 @@ async function toggleHidden(g) {
 }
 // ---- categoria manual (arrastar), ordenação e categorias recolhíveis ----
 // vídeos: só "Filmes" (1 h ou mais; sem a duração, arquivo de 1 GB ou mais) e "Vídeos" — pastas e subcategorias manuais não contam
-const vcat = g => (g.secs ? g.secs >= 3600 : (g.size || 0) >= 1073741824) ? 'Filmes' : 'Vídeos';
+// vídeos: subcategoria = pasta (séries ficam juntas); dentro da pasta só separa em Filmes/Vídeos se houver dos dois tipos
+const vkind = g => (g.secs ? g.secs >= 5100 : (g.size || 0) >= 1073741824) ? 'Filmes' : 'Vídeos';   // filme: 1 h 25 min ou mais
+let vMixMemo = { src: null, n: 0, map: null };
+function vMix() {
+  const src = typeof games !== 'undefined' ? games : [];
+  if (vMixMemo.src !== src || vMixMemo.n !== src.length) { const m = {}; src.forEach(g => { const d = g.vdir || ''; (m[d] = m[d] || new Set()).add(vkind(g)); }); vMixMemo = { src, n: src.length, map: m }; }
+  return vMixMemo.map;
+}
+const vcat = g => { const d = g.vdir || '', k = vkind(g), mixed = (vMix()[d] || new Set()).size > 1; return d ? (mixed ? d + ' · ' + k : d) : k; };
 function ecat(g) { if ((sysOf(g) || {}).type === 'video') return vcat(g); const o = covers['cat|' + coverKey(g)]; const c = o === undefined ? g.cat : (o === '__main' ? '' : o); return c && deadCats(g.sid).includes(c) ? '' : c; }
 // subcategorias por console: criadas pelo usuário ('ucat|console'), excluídas ('dcat|console') e nomes trocados ('lcat|console|cat')
 const catSid = () => (sys && !sys.virtual && sys.id) || '';

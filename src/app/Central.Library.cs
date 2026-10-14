@@ -178,7 +178,7 @@ static partial class Central
                         double secs = VideoSeconds(f); bool movie = secs > 0 ? secs >= 3600 : f.Length >= 700L * 1024 * 1024;
                         string kind = movie ? "Filmes" : "Vídeos", mainDirs = "";
                         var vg = new Dictionary<string, object> { { "name", name }, { "path", Rel(root, f.FullName) }, { "size", f.Length }, { "mtime", (long)(f.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalMilliseconds }, { "cat", mainDirs + kind } };
-                        if (secs > 0) vg["secs"] = (long)secs;
+                        if (secs > 0) vg["secs"] = (long)secs; if (rel != "") vg["vdir"] = rel.Replace("\\", " / ");
                         if (priv) vg["priv"] = true;
                         games.Add(vg); continue;
                     }
