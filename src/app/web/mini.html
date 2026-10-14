@@ -27,6 +27,7 @@
   .foot { display:flex; gap:14px; padding:8px 14px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
   .foot b { color:var(--text); background:#2c3038; border-radius:5px; padding:1px 6px; font-weight:600; margin-right:4px; }
   #msg { position:fixed; left:50%; bottom:46px; transform:translateX(-50%); background:#2c3038; padding:8px 14px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; } #msg.on { opacity:1; } #msg.err { background:#7f1d1d; }
+  #privTip { position:fixed; top:14px; left:50%; display:flex; align-items:center; gap:8px; padding:7px 16px 7px 12px; border-radius:20px; background:#2c3038; font-weight:600; transform:translate(-50%,-150%); opacity:0; transition:transform .3s cubic-bezier(.3,1.4,.5,1), opacity .2s; pointer-events:none; } #privTip.on { transform:translate(-50%,0); opacity:1; } #privTip svg { width:18px; height:18px; fill:#3D7BFF; color:#3D7BFF; }
 </style></head>
 <body>
 <div class="wrap">
@@ -37,14 +38,14 @@
   </div>
   <div class="right"><div id="cov"></div><div id="ttl"></div><div id="sub"></div></div>
 </div>
-<div id="msg"></div>
+<div id="msg"></div><div id="privTip"></div>
 <script>
 const $ = id => document.getElementById(id), host = window.chrome && chrome.webview;
 const post = m => host && host.postMessage(m);
 const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-]+/g, ' ');
 const api = async u => { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); };
-let items = [], shown = [], sel = 0, loadedAt = 0, covers = {}, art = {}, sysById = {};
+let privOn = false, items = [], shown = [], sel = 0, loadedAt = 0, covers = {}, art = {}, sysById = {};
 const key = g => g.sid + '|' + g.path;
 const nameOf = g => covers['name|' + key(g)] || g.name;
 async function load() {
@@ -53,7 +54,7 @@ async function load() {
     covers = cv || {}; art = ac || {}; const hs = new Set(hid || []);
     const on = cs.filter(c => c.enabled !== false); sysById = {}; on.forEach(c => sysById[c.id] = c);
     const lists = await Promise.all(on.map(c => api('/api/games?c=' + encodeURIComponent(c.id)).then(l => l.map(g => ({ ...g, sid: c.id }))).catch(() => [])));
-    items = [].concat(...lists).filter(g => !g.priv && !hs.has(key(g)));
+    items = [].concat(...lists).filter(g => !hs.has(key(g)));
     items.forEach(g => g._n = norm(nameOf(g)));
     loadedAt = Date.now();
   } catch (e) { items = []; }
@@ -61,14 +62,16 @@ async function load() {
 }
 function search() {
   const q = norm($('q').value).trim(), ws = q.split(/\s+/).filter(Boolean);
-  if (!ws.length) shown = items.filter(g => covers['fav|' + key(g)] === '1').sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-  else shown = items.filter(g => ws.every(w => g._n.includes(w))).sort((a, b) => (b._n.startsWith(q) - a._n.startsWith(q)) || nameOf(a).localeCompare(nameOf(b))).slice(0, 80);
+  const pool = items.filter(g => !g.priv || privOn);
+  if (privOn && !ws.length) shown = pool.filter(g => g.priv).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  else if (!ws.length) shown = pool.filter(g => covers['fav|' + key(g)] === '1').sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  else shown = pool.filter(g => ws.every(w => g._n.includes(w))).sort((a, b) => (b._n.startsWith(q) - a._n.startsWith(q)) || nameOf(a).localeCompare(nameOf(b))).slice(0, 80);
   sel = 0; render();
 }
 function render() {
   const L = $('list'), q = $('q').value.trim();
   if (!shown.length) { L.innerHTML = `<div class="empty">${q ? 'Nada encontrado.' : items.length ? 'Digite para buscar. Os favoritos aparecem aqui.' : 'Carregando...'}</div>`; preview(null); return; }
-  L.innerHTML = (q ? '' : '<div class="hd">⭐ Favoritos</div>') + shown.map((g, i) => { const s = sysById[g.sid] || {}; return `<div class="it${i === sel ? ' on' : ''}" data-i="${i}"><span class="k">${s.type === 'video' ? '🎬' : s.type === 'pc' ? '🖥' : '🎮'}</span><span class="n">${esc(nameOf(g))}</span><span class="s">${esc(s.name || '')}</span></div>`; }).join('');
+  L.innerHTML = (q ? '' : privOn ? '<div class="hd">🔓 Ocultos</div>' : '<div class="hd">⭐ Favoritos</div>') + shown.map((g, i) => { const s = sysById[g.sid] || {}; return `<div class="it${i === sel ? ' on' : ''}" data-i="${i}"><span class="k">${s.type === 'video' ? '🎬' : s.type === 'pc' ? '🖥' : '🎮'}</span><span class="n">${esc(nameOf(g))}</span><span class="s">${esc(s.name || '')}</span></div>`; }).join('');
   L.querySelectorAll('.it').forEach(el => { el.onclick = () => { sel = +el.dataset.i; mark(); }; el.ondblclick = () => { sel = +el.dataset.i; openSel(); }; });
   preview(shown[sel]);
 }
@@ -107,6 +110,7 @@ function move(d) { if (!shown.length) return; sel = (sel + d + shown.length) % s
 $('q').oninput = search;
 $('openMain').onclick = () => post('open');
 document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h')) { e.preventDefault(); togglePriv(); return; }
   if (e.key === 'ArrowDown') { e.preventDefault(); move(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
   else if (e.key === 'PageDown') { e.preventDefault(); move(8); } else if (e.key === 'PageUp') { e.preventDefault(); move(-8); }
   else if (e.key === 'Enter') { e.preventDefault(); openSel(); } else if (e.key === 'Escape') { e.preventDefault(); post('hide'); }
@@ -116,9 +120,11 @@ document.addEventListener('keydown', e => {
 let padPrev = {};
 (function poll() { const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(Boolean);
   if (p && document.hasFocus()) { const b = i => !!(p.buttons[i] && p.buttons[i].pressed), st = { u: b(12) || p.axes[1] < -.6, d: b(13) || p.axes[1] > .6, a: b(0), x: b(1) };
+    const both = b(10) && b(11); if (both && !padPrev.both) togglePriv(); st.both = both;
     if (st.u && !padPrev.u) move(-1); if (st.d && !padPrev.d) move(1); if (st.a && !padPrev.a) openSel(); if (st.x && !padPrev.x) post('hide'); padPrev = st; }
   requestAnimationFrame(poll); })();
-window.miniShown = () => { $('q').focus(); $('q').select(); if (Date.now() - loadedAt > 120000) load(); };
+function togglePriv() { privOn = !privOn; search(); const t = $('privTip'); t.innerHTML = (privOn ? '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' : '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>') + 'Ocultos'; t.classList.add('on'); clearTimeout(togglePriv.t); togglePriv.t = setTimeout(() => t.classList.remove('on'), 1600); }
+window.miniShown = () => { privOn = false; search(); $('q').focus(); $('q').select(); if (Date.now() - loadedAt > 120000) load(); };
 load(); $('q').focus();
 </script>
 </body></html>
