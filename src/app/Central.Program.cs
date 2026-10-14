@@ -40,6 +40,10 @@ static partial class Central
 
     [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    public static void CrashLog(string kind, Exception ex)
+    {
+        try { string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CentralDeJogos"); Directory.CreateDirectory(d); File.AppendAllText(Path.Combine(d, "koru-erros.log"), DateTime.Now.ToString("s") + " [" + kind + "] " + ex + "\r\n\r\n"); } catch { }
+    }
     [STAThread]
     static void Main(string[] argv)
     {
@@ -62,6 +66,11 @@ static partial class Central
         try { WebHost.Prepare(); } catch { }
         WebHost.Handler = Handle;
 
+        // nada derruba o app sem deixar registro: erros inesperados vão para %LOCALAPPDATA%\CentralDeJogos\koru-erros.log
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) => CrashLog("ui", e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (s, e) => CrashLog("fatal", e.ExceptionObject as Exception);
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) => { CrashLog("task", e.Exception); e.SetObserved(); };
         Application.EnableVisualStyles();
         var menu = new ContextMenuStrip();
         menu.Items.Add("Abrir o Koru", null, (s, e) => OpenBrowser());

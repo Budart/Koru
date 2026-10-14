@@ -659,6 +659,7 @@ let fgLaunching = false;
 const emuReady = g => { const s = sysOf(g) || sys || {}; return s.type === 'pc' || !!s.emulatorOk; };
 function fgLaunch(noWait) {
   const g = fg.items[fg.sel], el = $('fgTrack').querySelector(`.fgcard[data-i="${fg.sel}"]`); if (!g || fxOpen) return;
+  if ((sysOf(g) || {}).type === 'video') { openVPlayer(g); return; }   // vídeo: abre o player (sem animação de tela cheia)
   if (!emuReady(g)) { launch(); return; }   // sem emulador: primeiro a oferta de emuladores, sem animação por cima
   // com o fundo do jogo na tela: os itens somem e o próprio fundo cresce até a tela cheia
   const host = $('fgBg');

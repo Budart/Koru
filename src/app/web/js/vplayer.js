@@ -12,6 +12,8 @@ const VP_ICO = {
   asp: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10v-1h3M17 14v1h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   hq: '<svg viewBox="0 0 24 24"><path d="M3 7h3v4h4V7h3v10h-3v-3H6v3H3zM15 7h3a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-3zm3 3h-0v4h0z" /></svg>',
   full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><path d="M5 5v14l10-7zM16 5h3v14h-3z"/></svg>',
+  max: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 9h16" stroke="currentColor" stroke-width="2"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
 };
 const vpUrl = (g, k, extra) => `/api/${k}?c=${encodeURIComponent(g.sid || (sysOf(g) || {}).id)}&p=${encodeURIComponent(g.path)}${extra || ''}`;
@@ -19,19 +21,19 @@ const vpFmt = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t
 function vpEl() {
   let el = $('vplayer'); if (el) return el;
   el = document.createElement('div'); el.id = 'vplayer';
-  el.innerHTML = `<div class="vpbox"><video id="vpV" preload="auto" playsinline></video></div><div class="vpmsg" id="vpMsg"></div>
+  el.innerHTML = `<div class="vpframe"><div class="vpbox"><video id="vpV" preload="auto" playsinline></video></div><div class="vpmsg" id="vpMsg"></div>
   <div class="vptop"><div class="vptitle" id="vpTitle"></div><button class="vpb" data-a="close" title="Fechar (Esc)">${VP_ICO.close}</button></div>
   <div class="vpbar">
     <div class="vpseek" id="vpSeek"><div class="vpbuf" id="vpBuf"></div><div class="vpprog" id="vpProg"></div><div class="vpknob" id="vpKnob"></div><div class="vptip" id="vpTip"></div></div>
     <div class="vprow">
-      <button class="vpb" data-a="back" title="Voltar 10 s (←)">${VP_ICO.back}</button><button class="vpb big" data-a="play" id="vpPlay" title="Play/Pause (Espaço)">${VP_ICO.pause}</button><button class="vpb" data-a="fwd" title="Avançar 10 s (→)">${VP_ICO.fwd}</button>
+      <button class="vpb" data-a="back" title="Voltar 10 s (←)">${VP_ICO.back}</button><button class="vpb big" data-a="play" id="vpPlay" title="Play/Pause (Espaço)">${VP_ICO.pause}</button><button class="vpb" data-a="fwd" title="Avançar 10 s (→)">${VP_ICO.fwd}</button><button class="vpb" data-a="next" id="vpNext" title="Próximo vídeo (N)">${VP_ICO.next}</button>
       <div class="vpvol"><button class="vpb" data-a="mute" id="vpMute" title="Mudo (M)">${VP_ICO.vol}</button><input type="range" id="vpVol" min="0" max="1" step="0.02" value="1"></div>
       <span class="vptime" id="vpTime">0:00 / 0:00</span><span class="vpgrow"></span>
       <div class="vpmenu-w"><button class="vpb" data-a="sub" title="Legendas (S)">${VP_ICO.sub}</button><div class="vpmenu" id="vpSubs"></div></div>
       <button class="vpb wide" data-a="asp" id="vpAsp" title="Proporção (Ctrl+scroll)">${VP_ICO.asp}<span>Original</span></button>
       <button class="vpb wide" data-a="hq" title="Abrir no player avançado (upscaling, todos os formatos)">${VP_ICO.hq}<span>Upscaling</span></button>
-      <button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
-    </div></div>`;
+      <button class="vpb" data-a="max" id="vpMax" title="Ocupar a janela toda (W)">${VP_ICO.max}</button><button class="vpb" data-a="full" title="Tela cheia (F)">${VP_ICO.full}</button>
+    </div></div></div>`;
   document.body.appendChild(el);
   const v = $('vpV');
   el.querySelectorAll('[data-a]').forEach(b => b.onclick = e => { e.stopPropagation(); vpAct(b.dataset.a); });
@@ -40,7 +42,7 @@ function vpEl() {
   v.ontimeupdate = vpPaint; v.onprogress = vpPaint; v.onvolumechange = () => { $('vpMute').innerHTML = v.muted || v.volume === 0 ? VP_ICO.mute : VP_ICO.vol; $('vpVol').value = v.muted ? 0 : v.volume; try { localStorage.setItem('vpvol', v.volume); localStorage.setItem('vpmute', v.muted ? '1' : ''); } catch (e) {} };
   v.onloadedmetadata = () => { vpLayout(); if (!v.videoWidth) vpFail(); };
   v.onerror = () => vpFail();
-  v.onended = () => { try { localStorage.removeItem('vpos|' + coverKey(VP.g)); } catch (e) {} vpClose(); };
+  v.onended = () => { try { localStorage.removeItem('vpos|' + coverKey(VP.g)); } catch (e) {} if (vpNextOf(VP.g)) vpAct('next'); else vpClose(); };
   $('vpVol').oninput = () => { v.volume = +$('vpVol').value; v.muted = v.volume === 0; };
   const sk = $('vpSeek'), at = e => { const r = sk.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (v.duration || 0); };
   let drag = false;
@@ -48,6 +50,7 @@ function vpEl() {
   sk.onpointermove = e => { const t = at(e), r = sk.getBoundingClientRect(); $('vpTip').textContent = vpFmt(t); $('vpTip').style.left = (e.clientX - r.left) + 'px'; if (drag) { v.currentTime = t; vpPaint(); } };
   sk.onpointerup = () => drag = false;
   el.addEventListener('mousemove', vpShow);
+  el.addEventListener('mousedown', e => { if (e.target === el && el.classList.contains('win')) vpClose(); });
   el.addEventListener('wheel', e => { e.preventDefault(); if (e.ctrlKey) vpAspect(e.deltaY < 0 ? 1 : -1); else vpVolume(e.deltaY < 0 ? .05 : -.05); }, { passive:false });
   window.addEventListener('resize', () => { if (VP.open) vpLayout(); });
   return el;
@@ -62,7 +65,7 @@ async function openVPlayer(g) {
   v.src = vpUrl(g, 'vfile');
   let pos = 0; try { pos = +(localStorage.getItem('vpos|' + coverKey(g)) || 0); } catch (e) {}
   v.onloadeddata = () => { if (pos > 5 && v.duration && pos < v.duration - 10) v.currentTime = pos; v.onloadeddata = null; };
-  el.classList.add('on'); music.pause(); vpAspect(0); vpShow();
+  el.classList.add('on'); if (!el.classList.contains('max')) el.classList.add('win'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
   // legendas externas (.srt / .vtt com o mesmo nome do vídeo)
@@ -97,7 +100,7 @@ function vpSeek(dt) { const v = $('vpV'); v.currentTime = Math.max(0, Math.min((
 function vpOsd(t) { const m = $('vpMsg'); if ($('vplayer').classList.contains('fail')) return; m.textContent = t; m.classList.add('on'); clearTimeout(vpOsd.t); vpOsd.t = setTimeout(() => m.classList.remove('on'), 1200); }
 function vpAspect(d) { VP.aspect = (VP.aspect + d + VP_ASPECTS.length) % VP_ASPECTS.length; $('vpAsp').querySelector('span').textContent = VP_ASPECTS[VP.aspect][1]; vpLayout(); if (d) vpOsd('Proporção: ' + VP_ASPECTS[VP.aspect][1]); }
 function vpLayout() {
-  const box = $('vplayer').querySelector('.vpbox'), v = $('vpV'), k = VP_ASPECTS[VP.aspect][0], W = innerWidth, H = innerHeight;
+  const box = $('vplayer').querySelector('.vpbox'), v = $('vpV'), k = VP_ASPECTS[VP.aspect][0], fr = $('vplayer').querySelector('.vpframe').getBoundingClientRect(), W = fr.width, H = fr.height;
   v.style.objectFit = k === 'fill' ? 'cover' : k === 'auto' ? 'contain' : 'fill';
   if (k === 'auto' || k === 'fill' || k === 'stretch') { Object.assign(box.style, { width: W + 'px', height: H + 'px' }); return; }
   const [a, b] = k.split(':').map(Number), r = a / b, w = Math.min(W, H * r);
@@ -128,6 +131,8 @@ async function vpAct(a) {
   else if (a === 'asp') vpAspect(1);
   else if (a === 'full') { document.body.classList.toggle('vpfull'); if (host) host.postMessage('fs'); setTimeout(vpLayout, 300); }
   else if (a === 'close') vpClose();
+  else if (a === 'max') { const el = $('vplayer'); el.classList.toggle('win'); el.classList.toggle('max', !el.classList.contains('win')); setTimeout(vpLayout, 260); }
+  else if (a === 'next') { const n = vpNextOf(VP.g); if (!n) { vpOsd('Último vídeo da lista'); return; } const v0 = $('vpV'); if (v0.currentTime > 5 && v0.duration && v0.currentTime < v0.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v0.currentTime); } catch (e) {} const j = shown.indexOf(n); if (j >= 0 && typeof selectGame === 'function') selectGame(j, true); openVPlayer(n); vpOsd('▶ ' + dn(n)); }
   else if (a === 'hq') {   // player avançado (mpv): upscaling + qualquer formato
     if (!await mpvReady(true)) return;
     const g = VP.g, t = v.currentTime; vpClose();
@@ -146,10 +151,10 @@ function vpInput(a) {
     return;
   }
   ({ ok: () => vpAct('play'), back: () => vpClose(), left: () => vpSeek(-10), right: () => vpSeek(10), up: () => vpVolume(.05), down: () => vpVolume(-.05),
-     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('full'), select: () => vpAct('mute'), search: () => vpAct('hq') }[a] || (() => {}))();
+     pgup: () => vpSeek(-60), pgdn: () => vpSeek(60), fav: () => vpAct('subnext'), menu: () => vpAspect(1), start: () => vpAct('max'), select: () => vpAct('mute'), search: () => vpAct('next') }[a] || (() => {}))();
 }
 function vpKey(e) {
-  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', u: 'hq', U: 'hq', Escape: 'close', Backspace: 'close' };
+  const k = e.key, map = { ' ': 'play', k: 'play', K: 'play', ArrowLeft: 'back', ArrowRight: 'fwd', m: 'mute', M: 'mute', f: 'full', F: 'full', F11: 'full', s: 'subnext', S: 'subnext', a: 'asp', A: 'asp', u: 'hq', U: 'hq', n: 'next', N: 'next', w: 'max', W: 'max', Escape: 'close', Backspace: 'close' };
   e.preventDefault();
   if (k === 'ArrowUp') return vpVolume(.05); if (k === 'ArrowDown') return vpVolume(-.05);
   if (k === 'PageUp') return vpSeek(-60); if (k === 'PageDown') return vpSeek(60);
@@ -161,7 +166,7 @@ function vpKey(e) {
 /* ---------- prévia de fundo na lista: o próprio vídeo, do início, mudo e leve ---------- */
 let vpPrevT = 0;
 function vpPrevStop() {
-  clearTimeout(vpPrevT); const o = $('vprev'); if (!o) return;
+  clearTimeout(vpPrevT); document.body.classList.remove('vprevon'); const o = $('vprev'); if (!o) return;
   o.classList.remove('on'); const v = o; setTimeout(() => { try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch (e) {} }, 500); o.id = '';
 }
 function vpPrev(g) {
@@ -171,7 +176,12 @@ function vpPrev(g) {
     if (shown[gIdx] !== g || screen !== 'games' || VP.open) return;
     const v = document.createElement('video'); v.id = 'vprev'; v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto';
     v.src = vpUrl(g, 'vfile');
-    v.onplaying = () => v.classList.add('on'); v.onerror = () => v.remove();
+    v.onplaying = () => { v.classList.add('on'); document.body.classList.add('vprevon'); if (typeof setVidPlay === 'function') setVidPlay(true); }; v.onerror = () => v.remove();
     $('gameBg').appendChild(v); v.play().catch(() => v.remove());
   }, 2500);
 }
+
+// próximo vídeo da lista atual (mesma ordem da tela)
+function vpNextOf(g) { const i = shown.indexOf(g); if (i < 0) return null; for (let k = i + 1; k < shown.length; k++) { const s = sysOf(shown[k]) || {}; if (s.type === 'video') return shown[k]; } return null; }
+// antes de excluir: fecha o player e a prévia (o Windows só deixa apagar arquivo que ninguém está usando)
+function vpRelease() { try { if (VP.open) vpClose(); } catch (e) {} try { vpPrevStop(); const v = $('vpV'); if (v) { v.removeAttribute('src'); v.load(); } } catch (e) {} }

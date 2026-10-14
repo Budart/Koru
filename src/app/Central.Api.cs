@@ -236,8 +236,9 @@ static partial class Central
                     Directory.CreateDirectory(td); string tmp = Path.Combine(Path.GetTempPath(), "koru-th-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(tmp);
                     try
                     {
-                        var p = Process.Start(new ProcessStartInfo(exe, "--no-config --msg-level=all=no --vo=image --vo-image-format=jpg --vo-image-jpeg-quality=88 --vo-image-outdir=\"" + tmp + "\" --frames=1 --start=20% --hr-seek=no --no-audio --no-sub --vf=scale=640:-2 -- \"" + vf + "\"") { UseShellExecute = false, CreateNoWindow = true });
+                        Process p = null; lock (WebHost.ThumbProcs) { p = Process.Start(new ProcessStartInfo(exe, "--no-config --msg-level=all=no --vo=image --vo-image-format=jpg --vo-image-jpeg-quality=88 --vo-image-outdir=\"" + tmp + "\" --frames=1 --start=20% --hr-seek=no --no-audio --no-sub --vf=scale=640:-2 -- \"" + vf + "\"") { UseShellExecute = false, CreateNoWindow = true }); WebHost.ThumbProcs.Add(p); }
                         if (!p.WaitForExit(20000)) try { p.Kill(); } catch { }
+                        lock (WebHost.ThumbProcs) WebHost.ThumbProcs.Remove(p);
                         var o = Directory.GetFiles(tmp, "*.jpg").FirstOrDefault(); if (o != null) File.Copy(o, f, true);
                     }
                     catch { }
@@ -283,6 +284,13 @@ static partial class Central
                 string file = Full(root, S(body, "path"));
                 if (c == null || !File.Exists(file) || !AllDirs(c).Any(rd => file.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)))
                 { SendJson(ctx, Err("Arquivo não encontrado"), 404); return; }
+                if (IsVideo(c))
+                {   // vídeo: solta o arquivo (prévia, player, miniatura) e tenta de novo por alguns segundos
+                    WebHost.ReleaseFile(file); Dictionary<string, object> res = null; string last = "";
+                    for (int i = 0; i < 12 && res == null; i++) { try { res = DeleteRom(file); } catch (Exception ex) { last = ex.Message; Thread.Sleep(400); } }
+                    SendJson(ctx, res ?? new Dictionary<string, object> { { "ok", false }, { "msg", "O arquivo ainda está em uso: " + last } });
+                    return;
+                }
                 SendJson(ctx, IsPc(c) ? UninstallPcGame(file) : DeleteRom(file));
             }
             else if (path == "/api/localimg")

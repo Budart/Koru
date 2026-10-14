@@ -854,3 +854,9 @@ body.crt .trt { display:none; } body.crt .trbtn { padding-right:8px; }
 #vplayer .vpmenu.on { display:block; } #vplayer .vpmi { padding:8px 12px; border-radius:8px; cursor:pointer; font-size:14px; } #vplayer .vpmi:hover, #vplayer .vpmi.kb { background:rgba(255,255,255,.1); } #vplayer .vpmi.on { color:#3D7BFF; font-weight:700; } #vplayer .vpmi.dim { opacity:.6; cursor:default; font-size:12px; }
 #vplayer .vpmsg { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); padding:12px 20px; border-radius:12px; background:rgba(20,22,28,.85); font:600 16px "Poppins",sans-serif; text-align:center; opacity:0; transition:opacity .25s; pointer-events:none; }
 #vplayer .vpmsg.on, #vplayer.fail .vpmsg { opacity:1; } #vplayer.fail .vpmsg { pointer-events:auto; } #vplayer .vpmsg .btn { margin-top:12px; }
+/* player em janela (padrão) ou ocupando o app */
+#vplayer.win { background:rgba(5,6,10,.72); backdrop-filter:blur(6px); cursor:default; }
+#vplayer .vpframe { position:absolute; inset:0; overflow:hidden; background:#000; transition:inset .25s ease, border-radius .25s ease; }
+#vplayer.win .vpframe { inset:5% 7%; border-radius:16px; box-shadow:0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08); }
+#vplayer.win .vptop .vptitle { font-size:16px; }
+body.vprevon #vidBox { opacity:0 !important; pointer-events:none; }

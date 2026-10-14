@@ -163,13 +163,17 @@ function askInput(title, text, yes, value, ph) {
   return p;
 }
 async function askDelete(g) {
-  const pc = sysOf(g).type === 'pc';
+  const pc = sysOf(g).type === 'pc', vid = sysOf(g).type === 'video';
+  if (vid) { const ok = await ask('Excluir este vídeo do seu PC?', `"${esc(dn(g))}" vai para a Lixeira do Windows.`, 'Excluir'); if (!ok) return; vpRelease(); await new Promise(r => setTimeout(r, 400)); return askDeleteGo(g, false); }
   const ok = await ask(pc ? 'Desinstalar este jogo?' : 'Excluir este jogo do seu PC?',
     pc ? `"${dn(g)}" será desinstalado do computador (pela Steam ou pelo desinstalador do jogo, quando possível).`
        : `"${dn(g)}" e seus arquivos (ROM, faixas e saves com o mesmo nome) serão apagados do seu PC — vão para a Lixeira do Windows.`, pc ? 'Desinstalar' : 'Excluir');
   if (!ok) return;
+  return askDeleteGo(g, pc);
+}
+async function askDeleteGo(g, pc) {
   let r; try { r = await api('/api/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ console: g.sid, path: g.path }) }); } catch (e) { toast(e.message, true); return; }
-  if (!r.ok) { await ask('Não foi possível desinstalar', r.msg, 'OK'); return; }
+  if (!r.ok) { await ask(pc ? 'Não foi possível desinstalar' : 'Não foi possível excluir', r.msg, 'OK'); return; }
   toast(r.msg); sfx('back');
   if (!r.keep) {
     [games, gameCache[g.sid], allGames].forEach(l => { if (l) { const k = l.indexOf(g); if (k >= 0) l.splice(k, 1); } });
@@ -412,6 +416,7 @@ function filter() {
   const src = globalMode ? (allGames || []) : games;
   const qm = g => !q || dn(g).toLowerCase().includes(q) || g.name.toLowerCase().includes(q);
   let match = favMode ? src.filter(g => isFavG(g) && qm(g)) : (globalMode && !q ? [] : src.filter(qm));
+  if (globalMode) match = match.filter(g => !g.priv && !hidden.has(coverKey(g)));   // busca geral: nunca mostra ocultos
   const sname = id => (allSystems.find(s => s.id === id) || {}).name || '';
   shown = []; vItems = [];
   let nvis = 0;

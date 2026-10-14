@@ -171,10 +171,45 @@ function genHash(n) { let h = 0; for (const ch of (n || '')) h = (h * 31 + ch.ch
 //  • se tudo terminar sem nome parecido → a que carregou de qualquer jeito (nunca genérica se alguma imagem existe)
 // Fundo e título são completados depois, sem atrasar a capa.
 const SRC_PRIO = { libretro: 6, code: 6, sgdb: 5, steam: 4, wikimain: 2, fandom: 2, pcgw: 2, strategywiki: 2 };
+/* ---------- pôsteres de filmes e séries (sem chave): iTunes → Wikipedia ---------- */
+function movieQuery(g) {
+  let n = (dn(g) || g.name || '').replace(/[._]+/g, ' ');
+  const tv = n.match(/^(.*?)[\s-]*\bS(\d{1,2})\s*E\d{1,3}/i) || n.match(/^(.*?)[\s-]*\b(\d{1,2})x\d{2}\b/i);
+  const ym = n.match(/[\[(\s]((?:19|20)\d{2})[\])\s]|[\s(]((?:19|20)\d{2})$/);
+  const year = ym ? +(ym[1] || ym[2]) : 0;
+  if (tv) n = tv[1]; else if (ym) n = n.slice(0, ym.index);
+  n = n.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\b(2160p|1080p|720p|480p|4k|uhd|hdr\d*|bluray|blu-ray|brrip|bdrip|webrip|web-?dl|web|hdtv|dvdrip|x26[45]|h\.?26[45]|hevc|aac\d?|ac3|dts|5\.1|dual|dublado|legendado|nacional|remux|proper|repack|extended|unrated|yify|rarbg)\b.*$/i, ' ').replace(/\s+/g, ' ').trim();
+  return { q: n, year, tv: !!tv };
+}
+const posterCache = {};
+async function moviePoster(g) {
+  const { q, year, tv } = movieQuery(g); if (!q) return null;
+  const k = q + '|' + year + '|' + tv; if (k in posterCache) return posterCache[k];
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  let url = null;
+  try {
+    for (const country of ['BR', 'US']) {
+      const u = `https://itunes.apple.com/search?country=${country}&limit=10&media=${tv ? 'tvShow&entity=tvSeason' : 'movie'}&term=${encodeURIComponent(q)}`;
+      const r = await api('/api/proxy?u=' + encodeURIComponent(u)); const res = (r && r.results) || [];
+      const nm = x => norm(tv ? (x.artistName || x.collectionName) : x.trackName);
+      const sc = x => (nm(x) === norm(q) ? 3 : nm(x).includes(norm(q)) || norm(q).includes(nm(x)) ? 1 : 0) + (year && x.releaseDate && +x.releaseDate.slice(0, 4) === year ? 2 : 0);
+      const best = res.filter(x => x.artworkUrl100 && sc(x) > 0).sort((a, b) => sc(b) - sc(a))[0];
+      if (best) { url = best.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x900bb.'); break; }
+    }
+  } catch (e) {}
+  if (!url) try {   // Wikipedia: imagem principal do artigo do filme/série
+    for (const lang of ['pt', 'en']) {
+      const u = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrlimit=3&prop=pageimages&piprop=original&gsrsearch=${encodeURIComponent(q + (year ? ' ' + year : '') + (tv ? ' série' : ' filme'))}`;
+      const r = await api('/api/proxy?u=' + encodeURIComponent(u)); const pages = Object.values((r && r.query && r.query.pages) || {}).sort((a, b) => a.index - b.index);
+      const p = pages.find(x => x.original && /\.(jpe?g|png|webp)$/i.test(x.original.source)); if (p) { url = p.original.source; break; }
+    }
+  } catch (e) {}
+  return posterCache[k] = url;
+}
 async function resolveArt0(g) {
   const key = coverKey(g);
   if (covers[key]) return { box: covers[key], snap: null, src: 'manual' };
-  { const sv = (typeof sysOf === 'function' && sysOf(g)) || {}; if (sv.type === 'video') { const u = `/api/vthumb?c=${encodeURIComponent(g.sid || sv.id)}&p=${encodeURIComponent(g.path)}`; return { box: u, snap: u, src: 'video', v: 3 }; } }   // vídeo: quadro do próprio filme
+  { const sv = (typeof sysOf === 'function' && sysOf(g)) || {}; if (sv.type === 'video') { const u = `/api/vthumb?c=${encodeURIComponent(g.sid || sv.id)}&p=${encodeURIComponent(g.path)}`; const po = await moviePoster(g).catch(() => null); return { box: po || u, snap: u, src: po ? 'poster' : 'video', v: 3 }; } }   // vídeo: pôster do filme/série (iTunes, Wikipedia) e um quadro do próprio vídeo no fundo
   if (artCache[key] && artCache[key].box) return artCache[key];
   const q = cleanTitle(dn(g)) || dn(g), S = (typeof sysOf === 'function' && sysOf(g)) || {}, pc = S.type === 'pc', t0 = Date.now();
   const sgP = sgdbOn ? sgdbArt(g).catch(() => null) : Promise.resolve(null);

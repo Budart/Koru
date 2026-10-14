@@ -183,6 +183,12 @@ static partial class WebHost
                 view.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 view.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 view.CoreWebView2.WebMessageReceived += (o, m) => OnMessage(m.TryGetWebMessageAsString());
+                // o motor da página caiu (falta de memória, driver de vídeo...): registra e recarrega em vez de a janela "sumir"
+                view.CoreWebView2.ProcessFailed += (o, a) =>
+                {
+                    Central.CrashLog("webview", new Exception("ProcessFailed: " + a.ProcessFailedKind + " / " + a.Reason));
+                    try { form.BeginInvoke((Action)(() => { try { if (a.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited) { Process.Start(new ProcessStartInfo("cmd.exe", "/c timeout /t 2 >nul & start \"\" \"" + Application.ExecutablePath + "\"") { CreateNoWindow = true, UseShellExecute = false }); Environment.Exit(0); } else view.CoreWebView2.Reload(); } catch { } })); } catch { }
+                };
                 view.CoreWebView2.AddWebResourceRequestedFilter(BaseUrl + "*", CoreWebView2WebResourceContext.All);
                 view.CoreWebView2.WebResourceRequested += OnRequest;
                 // links externos (target=_blank) abrem no navegador padrão

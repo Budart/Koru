@@ -195,15 +195,28 @@ input-default-bindings=yes
 
     // ---------- arquivo de vídeo para o player/prévia da página (com "Range": só lê o pedaço pedido, sem carregar o arquivo) ----------
     public static Func<string, string, string> VideoFileOf;
+    static readonly List<RangeStream> OpenVids = new List<RangeStream>();
+    public static readonly List<Process> ThumbProcs = new List<Process>();
+    static string mpvFile;
+    // antes de apagar um vídeo: fecha a prévia/o player e encerra o que estiver com o arquivo aberto
+    public static void ReleaseFile(string f)
+    {
+        try { form.Invoke((Action)(() => { try { view.CoreWebView2.ExecuteScriptAsync("window.vpRelease&&vpRelease()"); } catch { } if (mpvProc != null && string.Equals(mpvFile, f, StringComparison.OrdinalIgnoreCase)) Stop(); })); } catch { }
+        List<RangeStream> l; lock (OpenVids) l = OpenVids.Where(x => string.Equals(x.File, f, StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var x in l) try { x.Dispose(); } catch { }
+        lock (ThumbProcs) foreach (var p in ThumbProcs.ToList()) try { if (!p.HasExited) p.Kill(); } catch { }
+    }
     class RangeStream : Stream
     {
-        readonly Stream s; long left;
-        public RangeStream(Stream s, long start, long len) { this.s = s; s.Seek(start, SeekOrigin.Begin); left = len; }
-        public override int Read(byte[] b, int o, int c) { if (left <= 0) return 0; int n = s.Read(b, o, (int)Math.Min(c, left)); left -= n; return n; }
+        readonly Stream s; long left; readonly string file;
+        public RangeStream(Stream s, long start, long len, string file) { this.s = s; this.file = file; s.Seek(start, SeekOrigin.Begin); left = len; lock (OpenVids) OpenVids.Add(this); }
+        public string File { get { return file; } }
+        public override int Read(byte[] b, int o, int c) { if (left <= 0) return 0; try { int n = s.Read(b, o, (int)Math.Min(c, left)); left -= n; return n; } catch { left = 0; return 0; } }
         public override bool CanRead { get { return true; } } public override bool CanSeek { get { return false; } } public override bool CanWrite { get { return false; } }
         public override long Length { get { throw new NotSupportedException(); } } public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
         public override void Flush() { } public override long Seek(long a, SeekOrigin b) { throw new NotSupportedException(); } public override void SetLength(long v) { throw new NotSupportedException(); } public override void Write(byte[] b, int o, int c) { throw new NotSupportedException(); }
-        protected override void Dispose(bool d) { if (d) s.Dispose(); base.Dispose(d); }
+        protected override void Dispose(bool d) { if (d) { try { s.Dispose(); } catch { } lock (OpenVids) OpenVids.Remove(this); } base.Dispose(d); }
+        public override int ReadTimeout { get; set; }
     }
     static void ServeVideo(Microsoft.Web.WebView2.Core.CoreWebView2WebResourceRequestedEventArgs e, Microsoft.Web.WebView2.Core.CoreWebView2Deferral deferral)
     {
@@ -228,7 +241,7 @@ input-default-bindings=yes
                     }
                     string ext = Path.GetExtension(f).ToLowerInvariant();
                     string type = ext == ".webm" || ext == ".mkv" ? "video/webm" : ext == ".ogv" ? "video/ogg" : "video/mp4";
-                    body = new RangeStream(fs, a, b - a + 1); code = m != null && m.Success ? 206 : 200;
+                    body = new RangeStream(fs, a, b - a + 1, f); code = m != null && m.Success ? 206 : 200;
                     hdr = "Content-Type: " + type + "\r\nAccept-Ranges: bytes\r\nContent-Length: " + (b - a + 1) + (code == 206 ? "\r\nContent-Range: bytes " + a + "-" + b + "/" + len : "") + "\r\nCache-Control: no-store";
                 }
             }
@@ -283,7 +296,7 @@ input-default-bindings=yes
             a.Add("--"); a.Add(Q(file));
             if (full && !form.Full) { form.ToggleFull(); mpvFull = true; } else mpvFull = false;
             var psi = new ProcessStartInfo(exe, string.Join(" ", a)) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) };
-            MpvLog("play: " + exe + " " + psi.Arguments);
+            mpvFile = file; MpvLog("play: " + exe + " " + psi.Arguments);
             mpvProc = Process.Start(psi); mpvProc.EnableRaisingEvents = true;
             var me = mpvProc; me.Exited += (s, e) => { try { form.BeginInvoke((Action)(() => { if (mpvProc == me) Stop(); })); } catch { } };
             GameOn = true; Post("game:on");
