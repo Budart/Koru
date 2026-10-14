@@ -333,7 +333,8 @@ document.addEventListener('keyup', e => { if (e.key === 'Control' && screen === 
 function togglePriv() {
   if (screen !== 'games' || !sys || sys.type !== 'video' || globalMode) return;
   if (!games.some(g => g.priv)) return;
-  privOn = !privOn; sfx('tick'); refilterKeep();
+  privOn = !privOn; sfx('tick');
+  if (privOn) { filter(); $('list').scrollTop = 0; selectGame(0, true); } else refilterKeep();
   privToast(privOn);
 }
 

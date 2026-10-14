@@ -204,7 +204,9 @@ async function toggleHidden(g) {
   const keep = nb || shown[gIdx]; filter(); const j = shown.indexOf(keep); selectGame(j >= 0 ? j : Math.min(gIdx, shown.length - 1), true);
 }
 // ---- categoria manual (arrastar), ordenação e categorias recolhíveis ----
-function ecat(g) { const o = covers['cat|' + coverKey(g)]; const c = o === undefined ? g.cat : (o === '__main' ? '' : o); return c && deadCats(g.sid).includes(c) ? '' : c; }
+// vídeos: só "Filmes" (1 h ou mais; sem a duração, arquivo de 1 GB ou mais) e "Vídeos" — pastas e subcategorias manuais não contam
+const vcat = g => (g.secs ? g.secs >= 3600 : (g.size || 0) >= 1073741824) ? 'Filmes' : 'Vídeos';
+function ecat(g) { if ((sysOf(g) || {}).type === 'video') return vcat(g); const o = covers['cat|' + coverKey(g)]; const c = o === undefined ? g.cat : (o === '__main' ? '' : o); return c && deadCats(g.sid).includes(c) ? '' : c; }
 // subcategorias por console: criadas pelo usuário ('ucat|console'), excluídas ('dcat|console') e nomes trocados ('lcat|console|cat')
 const catSid = () => (sys && !sys.virtual && sys.id) || '';
 const jsonOf = k => { try { return JSON.parse(covers[k] || '[]'); } catch (e) { return []; } };
@@ -212,6 +214,7 @@ const userCats = sid => jsonOf('ucat|' + sid), deadCats = sid => jsonOf('dcat|' 
 function saveKey(key, url) { if (url) covers[key] = url; else delete covers[key]; return api('/api/cover', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, url: url || '' }) }).catch(() => {}); }
 const catLabel = c => { if (!c) return sys && sys.type === 'video' && !globalMode ? 'Vídeos' : 'Jogos'; const o = covers['lcat|' + catSid() + '|' + c]; return o || c; };
 function catTargets() {
+  if (sys && sys.type === 'video') return [];   // vídeos: subcategorias automáticas, sem mover
   const base = (sys && sys.type === 'pc') ? ['', 'Ferramentas para jogos', 'Outros programas'] : ['Traduzidos', '', 'Hack / Mod', 'Homebrew / Port', 'Beta / Protótipo', 'Não licenciado'];
   const sid = catSid(), dead = deadCats(sid);
   return base.filter(c => !c || !dead.includes(c)).concat(userCats(sid).filter(c => !base.includes(c)));
@@ -451,7 +454,7 @@ function filter() {
   for (const g of [...multi]) if (!shown.includes(g)) multi.delete(g);
   if (multi.size < 2 && !multiKeep) multi.clear(); if (!multi.size) multiKeep = false; $('list').classList.toggle('multi', multi.size > 1 || multiKeep); multiInfo();
   $('list').classList.toggle('g', globalMode);
-  $('catBtn').style.display = globalMode ? 'none' : '';   // subcategorias são de cada console
+  $('catBtn').style.display = globalMode || (sys && sys.type === 'video') ? 'none' : '';   // subcategorias são de cada console
   vEmpty = `<div class="empty">${favMode ? 'Nenhum jogo favoritado ainda — use a ⭐ ao lado de um jogo.' : globalMode && !q ? 'Digite o nome de um jogo.' : 'Nenhum jogo encontrado.'}</div>`;
   $('list').scrollTop = 0; vRender();
   selectGame(0, true);
