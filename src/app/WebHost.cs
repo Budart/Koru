@@ -168,6 +168,10 @@ static partial class WebHost
         form.Activated += (s, e) => { try { if (ready) { view.CoreWebView2.ExecuteScriptAsync("window.vidAwaySet&&vidAwaySet(false)"); view.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal; } } catch { } };
         form.Deactivate += (s, e) => { try { if (ready) { view.CoreWebView2.ExecuteScriptAsync("window.vidAwaySet&&vidAwaySet(true)"); view.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; } } catch { } };
         form.FormClosing += (s, e) => { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; form.Hide(); } };
+        // janela escondida (fechar/bandeja) ou minimizada: o vídeo e o som param
+        form.VisibleChanged += (s, e) => { if (!form.Visible) { Post("vpclose"); StopAllMedia(); } };
+        form.Resize += (s, e) => { if (form.WindowState == FormWindowState.Minimized) Post("vppause"); };
+        Application.ApplicationExit += (s, e) => StopAllMedia();
         form.Shown += async (s, e) =>
         {
             FormHandle = form.Handle;
@@ -376,7 +380,7 @@ static partial class WebHost
             case "min": form.WindowState = FormWindowState.Minimized; break;
             case "max":
                 form.WindowState = form.WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; break;
-            case "close": form.Hide(); break;
+            case "close": Post("vpclose"); StopAllMedia(); form.Hide(); break;
             case "fs": form.ToggleFull(); fxFull = false; view.Focus(); break;
             // animação "Bom jogo.": o app vai para tela cheia de verdade e volta ao normal depois
             case "fxon": if (!form.Full && form.WindowState != FormWindowState.Minimized) { form.ToggleFull(); fxFull = true; view.Focus(); } break;

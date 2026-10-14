@@ -369,7 +369,7 @@ static partial class Central
                     Directory.CreateDirectory(td); string tmp = Path.Combine(Path.GetTempPath(), "koru-th-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(tmp);
                     try
                     {
-                        Process p = null; lock (WebHost.ThumbProcs) { p = Process.Start(new ProcessStartInfo(exe, "--no-config --msg-level=all=no --vo=image --vo-image-format=jpg --vo-image-jpeg-quality=88 --vo-image-outdir=\"" + tmp + "\" --frames=1 --start=20% --hr-seek=no --no-audio --no-sub --vf=scale=640:-2 -- \"" + vf + "\"") { UseShellExecute = false, CreateNoWindow = true }); WebHost.ThumbProcs.Add(p); }
+                        Process p = null; lock (WebHost.ThumbProcs) { p = Process.Start(new ProcessStartInfo(exe, "--no-config --msg-level=all=no --vo=image --vo-image-format=jpg --vo-image-jpeg-quality=88 --vo-image-outdir=\"" + tmp + "\" --frames=1 --start=20% --hr-seek=no --no-audio --no-sub --vf=scale=640:-2 -- \"" + vf + "\"") { UseShellExecute = false, CreateNoWindow = true }); WebHost.ThumbProcs.Add(p); WebHost.Tie(p); }
                         if (!p.WaitForExit(20000)) try { p.Kill(); } catch { }
                         lock (WebHost.ThumbProcs) WebHost.ThumbProcs.Remove(p);
                         var o = Directory.GetFiles(tmp, "*.jpg").FirstOrDefault(); if (o != null) File.Copy(o, f, true);

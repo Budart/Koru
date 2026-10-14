@@ -168,6 +168,28 @@ input-default-bindings=yes
 ";
 
     // ---------- arquivo de vídeo para o player/prévia da página (com "Range": só lê o pedaço pedido, sem carregar o arquivo) ----------
+    // todo processo de som/vídeo (mpv, FFmpeg, miniaturas) fica "preso" ao Koru: se o Koru fechar ou cair, o Windows encerra junto
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr a, string n);
+    [DllImport("kernel32.dll")] static extern bool SetInformationJobObject(IntPtr job, int cls, byte[] info, int len);
+    [DllImport("kernel32.dll")] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr proc);
+    static IntPtr jobH;
+    public static void Tie(Process p)
+    {
+        try
+        {
+            if (jobH == IntPtr.Zero)
+            {
+                jobH = CreateJobObject(IntPtr.Zero, null);
+                int size = IntPtr.Size == 8 ? 144 : 112; var info = new byte[size];   // JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+                BitConverter.GetBytes(0x2000).CopyTo(info, IntPtr.Size == 8 ? 16 : 16);   // LimitFlags = KILL_ON_JOB_CLOSE
+                SetInformationJobObject(jobH, 9, info, size);
+            }
+            AssignProcessToJobObject(jobH, p.Handle);
+        }
+        catch { }
+    }
+    // para tudo que é de vídeo/áudio (fechar o player, esconder ou sair do Koru)
+    public static void StopAllMedia() { try { AudStop(); } catch { } try { if (mpvProc != null) form.BeginInvoke((Action)(() => Stop())); } catch { } lock (ThumbProcs) foreach (var p in ThumbProcs.ToList()) try { if (!p.HasExited) p.Kill(); } catch { } }
     public static Func<string, string, string> VideoFileOf;
     const long ChunkMax = 4L << 20;
     static readonly List<RangeStream> OpenVids = new List<RangeStream>();
@@ -277,7 +299,7 @@ input-default-bindings=yes
             if (full && !mpvRemote && !form.Full) { form.ToggleFull(); mpvFull = true; } else mpvFull = false;
             var psi = new ProcessStartInfo(exe, string.Join(" ", a)) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) };
             mpvFile = file; MpvLog("play: " + exe + " " + psi.Arguments);
-            mpvProc = Process.Start(psi); mpvProc.EnableRaisingEvents = true;
+            mpvProc = Process.Start(psi); Tie(mpvProc); mpvProc.EnableRaisingEvents = true;
             var me = mpvProc; me.Exited += (s, e) => { try { form.BeginInvoke((Action)(() => { if (mpvProc == me) Stop(); })); } catch { } };
             if (!mpvRemote) { GameOn = true; Post("game:on"); }
             new Thread(() => PipeLoop(me)) { IsBackground = true }.Start();
@@ -351,7 +373,7 @@ input-default-bindings=yes
         var inv = System.Globalization.CultureInfo.InvariantCulture; string pipe = "koru-aud-" + Process.GetCurrentProcess().Id + "-" + Environment.TickCount;
         string args = string.Format(inv, "--no-config --no-video --no-terminal --idle=no --keep-open=yes --audio-display=no --force-window=no --aid={0} --start={1:0.###} --volume={2:0} {3} --input-ipc-server=\\\\.\\pipe\\{4} -- \"{5}\"",
             track + 1, Math.Max(0, start), Math.Max(0, Math.Min(150, vol)), paused ? "--pause" : "", pipe, file);
-        var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) });
+        var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe) }); Tie(p);
         audProc = p; audPos = -1; MpvLog("áudio: " + args);
         lock (ThumbProcs) ThumbProcs.Add(p);
         new Thread(() =>

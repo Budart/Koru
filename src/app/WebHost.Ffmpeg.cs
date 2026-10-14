@@ -63,6 +63,7 @@ static partial class WebHost
         { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         using (var p = Process.Start(psi))
         {
+            Tie(p);
             lock (ThumbProcs) ThumbProcs.Add(p);   // ao excluir o vídeo, também é encerrado
             var ms = new MemoryStream(); var err = p.StandardError.ReadToEndAsync();
             p.StandardOutput.BaseStream.CopyTo(ms);

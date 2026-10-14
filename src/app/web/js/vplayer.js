@@ -105,7 +105,7 @@ function vpFail() {
 function vpClose() {
   if (!VP.open) return; const v = VPV();
   if (v.currentTime > 5 && v.duration && v.currentTime < v.duration - 10) try { localStorage.setItem('vpos|' + coverKey(VP.g), v.currentTime); } catch (e) {}
-  vpMpvStop(); { const r = $('vpV'); r.pause(); r.removeAttribute('src'); r.load(); } clearInterval(VP.saveT);
+  vpTxStop(); vpMpvStop(); { const r = $('vpV'); r.pause(); r.removeAttribute('src'); r.load(); } clearInterval(VP.saveT);
   VP.open = false; $('vplayer').classList.remove('on');
   if (host && document.body.classList.contains('vpfull')) { document.body.classList.remove('vpfull'); host.postMessage('fs'); }
   sfx('back');
@@ -397,3 +397,7 @@ function vpCtx(x, y) {
   c.classList.add('on');
   const r = c.getBoundingClientRect(); c.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px'; c.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
 }
+
+// o Koru avisa quando a janela some (fechar/bandeja) ou minimiza
+if (window.chrome && chrome.webview) chrome.webview.addEventListener('message', e => { if (e.data === 'vpclose') { try { vpPrevStop(); if (VP.open) vpClose(); } catch (er) {} } else if (e.data === 'vppause') { try { vpPrevStop(); if (VP.open) $('vpV').pause(); } catch (er) {} } });
+window.addEventListener('pagehide', () => { try { vpTxStop(); } catch (e) {} });
