@@ -42,7 +42,7 @@ function vpEl() {
   el.querySelectorAll('[data-a]').forEach(b => b.onclick = e => { e.stopPropagation(); vpAct(b.dataset.a); });
   v.onclick = () => vpAct('play'); v.ondblclick = () => vpAct('full');
   v.onplay = v.onpause = () => { const x = VPV(); $('vpPlay').innerHTML = x.paused ? VP_ICO.play : VP_ICO.pause; el.classList.toggle('paused', x.paused); vpShow(); };
-  v.ontimeupdate = vpPaint; v.onprogress = vpPaint; v.onvolumechange = () => { const x = VPV(); $('vpMute').innerHTML = x.muted || x.volume === 0 ? VP_ICO.mute : VP_ICO.vol; $('vpVol').value = x.muted ? 0 : x.volume; try { localStorage.setItem('vpvol', x.volume); localStorage.setItem('vpmute', x.muted ? '1' : ''); } catch (e) {} };
+  v.ontimeupdate = () => { vpPaint(); if (VP.subDelay) vpCues(); }; v.onprogress = vpPaint; v.onvolumechange = () => { const x = VPV(); $('vpMute').innerHTML = x.muted || x.volume === 0 ? VP_ICO.mute : VP_ICO.vol; $('vpVol').value = x.muted ? 0 : x.volume; try { localStorage.setItem('vpvol', x.volume); localStorage.setItem('vpmute', x.muted ? '1' : ''); } catch (e) {} };
   v.onloadedmetadata = () => { vpLayout(); if (!VPM && !v.videoWidth) vpFail(); };
   v.onerror = () => { if (!VPM && VP.open && v.getAttribute('src')) vpFail(); };
   v.onended = () => { try { localStorage.removeItem('vpos|' + coverKey(VP.g)); } catch (e) {} if (vpNextOf(VP.g)) vpAct('next'); else vpClose(); };
@@ -70,7 +70,7 @@ async function openVPlayer(g) {
   let pos = 0; try { pos = +(localStorage.getItem('vpos|' + coverKey(g)) || 0); } catch (e) {}
   v.onloadeddata = () => { if (pos > 5 && v.duration && pos < v.duration - 10) v.currentTime = pos; v.onloadeddata = null; };
   { let b0 = 0; try { b0 = +(localStorage.getItem('vbri|' + coverKey(g)) || 0); } catch (e) {} VP.bri = b0 || (/\b(hdr|hdr10|dv|dovi|dolby.?vision)\b/i.test(g.name || g.path) ? 1.4 : 1); vpBri(0); }
-  VP.zoom = 1; VP.zx = 0; VP.zy = 0; vpZoomApply();
+  VP.zoom = 1; VP.zx = 0; VP.zy = 0; vpZoomApply(); VP.subDelay = 0;
   el.classList.add('on'); music.pause(); vpAspect(0); vpShow(); $('vpNext').style.display = vpNextOf(g) ? '' : 'none';
   v.play().catch(() => {});
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { const x = VPV(); if (VP.open && x.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), x.currentTime); } catch (e) {} }, 4000);
@@ -150,7 +150,8 @@ function vpSetSub(k) {
 }
 function vpCues() {
   let box = $('vpCues'); if (!box) { box = document.createElement('div'); box.id = 'vpCues'; $('vplayer').querySelector('.vpframe').appendChild(box); }
-  const t = VP.sub >= 0 ? [...$('vpV').textTracks][VP.sub] : null, cs = t && t.activeCues ? [...t.activeCues] : [];
+  const t = VP.sub >= 0 ? [...$('vpV').textTracks][VP.sub] : null, d = VP.subDelay || 0, now = $('vpV').currentTime - d;
+  const cs = !t ? [] : d && t.cues ? [...t.cues].filter(c => c.startTime <= now && c.endTime > now) : t.activeCues ? [...t.activeCues] : [];   // com atraso: escolhe as falas pelo tempo deslocado
   box.innerHTML = cs.map(c => `<span>${esc(c.text).replace(/&lt;(\/?)(i|b|u)&gt;/g, '<$1$2>').replace(/\n/g, '<br>')}</span>`).join('<br>');
   box.style.bottom = (100 - (+((VP.s && VP.s.subPos) || 95))) + 6 + '%';
 }
@@ -387,6 +388,9 @@ function vpCtx(x, y) {
     row('asp', VP_ICO.asp, 'Proporção', cur.asp, 1) +
     (VP.auds.length ? row('aud', VP_ICO.aud, 'Áudio', cur.aud, 1) : '') +
     row('sub', VP_ICO.sub, 'Legenda', cur.sub, 1) +
+    (VP.sub >= 0 ? row('sdm', '<svg viewBox="0 0 24 24"><path d="M11 6l-6 6 6 6M19 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>', 'Avançar legenda', '−0,5 s', 0) +
+      row('sdp', '<svg viewBox="0 0 24 24"><path d="M13 6l6 6-6 6M5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>', 'Atrasar legenda', '+0,5 s', 0) +
+      `<div class="vpcd" id="vpSubD">${vpSubDTxt()}</div>` : '') +
     '<div class="vpsep"></div>' +
     row('reveal', '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>', 'Abrir no Explorador', '', 0);
   const openSub = (kind, rowEl) => {
@@ -411,7 +415,8 @@ function vpCtx(x, y) {
   c.querySelectorAll('.vpcr').forEach(r => {
     const k = r.dataset.k;
     r.onmouseenter = () => openSub(k, r);
-    r.onclick = ev => { ev.stopPropagation(); if (k === 'reveal') { c.classList.remove('on'); sub.classList.remove('on'); const g = VP.g; if (document.body.classList.contains('vpfull')) vpAct('full'); api('/api/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: g.path }) }).catch(er => toast(er.message, true)); } else openSub(k, r); };
+    if (k === 'sdm' || k === 'sdp') r.onmouseenter = () => openSub('', r);
+    r.onclick = ev => { ev.stopPropagation(); if (k === 'sdm' || k === 'sdp') { vpSubDelay(k === 'sdm' ? -.5 : .5); const e2 = $('vpSubD'); if (e2) e2.textContent = vpSubDTxt(); return; } if (k === 'reveal') { c.classList.remove('on'); sub.classList.remove('on'); const g = VP.g; if (document.body.classList.contains('vpfull')) vpAct('full'); api('/api/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: g.path }) }).catch(er => toast(er.message, true)); } else openSub(k, r); };
   });
   sub.classList.remove('on'); c.classList.add('on');
   const r = c.getBoundingClientRect(); c.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px'; c.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
@@ -420,3 +425,7 @@ function vpCtx(x, y) {
 // o Koru avisa quando a janela some (fechar/bandeja) ou minimiza
 if (window.chrome && chrome.webview) chrome.webview.addEventListener('message', e => { if (e.data === 'vpclose') { try { vpPrevStop(); if (VP.open) vpClose(); } catch (er) {} } else if (e.data === 'vppause') { try { vpPrevStop(); if (VP.open) $('vpV').pause(); } catch (er) {} } });
 window.addEventListener('pagehide', () => { try { vpTxStop(); } catch (e) {} });
+
+// sincronia da legenda: passos de 0,5 s (negativo = a fala aparece antes)
+const vpSubDTxt = () => { const d = VP.subDelay || 0; return 'Sincronia da legenda: ' + (d === 0 ? 'original' : (d > 0 ? '+' : '−') + Math.abs(d).toFixed(1).replace('.', ',') + ' s'); };
+function vpSubDelay(dd) { VP.subDelay = Math.round(((VP.subDelay || 0) + dd) * 10) / 10; vpCues(); vpOsd(vpSubDTxt()); }
