@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -41,6 +42,34 @@ static partial class Central
         t = t.Replace("\r\n", "\n").TrimStart('\uFEFF');
         if (t.StartsWith("WEBVTT")) return t;
         return "WEBVTT\n\n" + Regex.Replace(t, @"(\d{2}:\d{2}:\d{2}),(\d{3})", "$1.$2");
+    }
+    // miniatura do vídeo pelo próprio Windows (a mesma do Explorador de Arquivos)
+    [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItemImageFactory { [PreserveSig] int GetImage(ThumbSize size, int flags, out IntPtr phbm); }
+    [StructLayout(LayoutKind.Sequential)] struct ThumbSize { public int cx, cy; }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    static extern void SHCreateItemFromParsingName(string path, IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory ppv);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr h);
+    static void ShellThumb(string file, string outJpg)
+    {
+        var t = new Thread(() =>
+        {
+            IntPtr hb = IntPtr.Zero;
+            try
+            {
+                IShellItemImageFactory fac; SHCreateItemFromParsingName(file, IntPtr.Zero, new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), out fac);
+                if (fac.GetImage(new ThumbSize { cx = 640, cy = 640 }, 0x8 | 0x1, out hb) != 0 || hb == IntPtr.Zero) return;   // só miniatura de verdade (sem ícone genérico)
+                using (var bmp = Image.FromHbitmap(hb))
+                {
+                    var enc = ImageCodecInfo.GetImageEncoders().First(x => x.FormatID == ImageFormat.Jpeg.Guid); var ep = new EncoderParameters(1); ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 88L);
+                    bmp.Save(outJpg, enc, ep);
+                }
+                Marshal.ReleaseComObject(fac);
+            }
+            catch { }
+            finally { if (hb != IntPtr.Zero) DeleteObject(hb); }
+        });
+        t.SetApartmentState(ApartmentState.STA); t.IsBackground = true; t.Start(); t.Join(15000);
     }
     static void Handle(Ctx ctx)
     {
@@ -196,6 +225,42 @@ static partial class Central
                 if (req.HttpMethod == "POST") WebHost.MpvInstall();
                 SendJson(ctx, new Dictionary<string, object> { { "installed", WebHost.MpvExe() != null }, { "busy", WebHost.MpvBusy }, { "progress", WebHost.MpvProgress }, { "step", WebHost.MpvStep }, { "error", WebHost.MpvError } });
             }
+            else if (path == "/api/posters")
+            {
+                // pôsteres de filmes/séries para a escolha manual: ThePosterDB e MoviePosterDB (lê a página de busca, sem chave)
+                string q = req.QueryString["q"] ?? "", src = req.QueryString["src"] ?? "tpdb"; var list = new List<object>(); var seen = new HashSet<string>();
+                Func<string, string> page = url =>
+                {
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                    using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                    {
+                        wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+                        wc.Headers[HttpRequestHeader.Accept] = "text/html,application/xhtml+xml"; wc.Headers[HttpRequestHeader.AcceptLanguage] = "en-US,en;q=0.9";
+                        return wc.DownloadString(url);
+                    }
+                };
+                Action<string, string> add = (u, label) => { u = System.Net.WebUtility.HtmlDecode(u); if (seen.Add(u) && list.Count < 60) list.Add(new Dictionary<string, object> { { "url", u }, { "label", label } }); };
+                try
+                {
+                    if (src == "tpdb")
+                    {
+                        string h = page("https://theposterdb.com/search?term=" + Uri.EscapeDataString(q) + "&section=movies");
+                        foreach (Match m in Regex.Matches(h, @"data-poster-id=""(\d+)""[\s\S]{0,1500}?(?:alt|title)=""([^""]*)""")) add("https://theposterdb.com/api/assets/" + m.Groups[1].Value, m.Groups[2].Value);
+                        foreach (Match m in Regex.Matches(h, @"https://images\.theposterdb\.com/[^""'\s)]+?\.(?:jpe?g|png|webp)")) add(m.Value, q);
+                        if (list.Count == 0) foreach (Match m in Regex.Matches(h, @"/api/assets/(\d+)")) add("https://theposterdb.com/api/assets/" + m.Groups[1].Value, q);
+                    }
+                    else
+                    {
+                        string h = page("https://www.movieposterdb.com/search?q=" + Uri.EscapeDataString(q));
+                        Action<string> grab = html => { foreach (Match m in Regex.Matches(html, @"https://images\.movieposterdb\.com/[^""'\s)]+?\.(?:jpe?g|webp|png)")) add(Regex.Replace(m.Value, @"/s\d+/", "/l/"), q); };
+                        grab(h);
+                        foreach (Match m in Regex.Matches(h, @"href=""((?:https://www\.movieposterdb\.com)?/[a-z0-9-]+-i\d+/?)""").Cast<Match>().Select(x => x.Groups[1].Value).Distinct().Take(3).Select(x => Regex.Match(x, ".+")))
+                            try { grab(page(m.Value.StartsWith("http") ? m.Value : "https://www.movieposterdb.com" + m.Value)); } catch { }
+                    }
+                }
+                catch (Exception ex) { SendJson(ctx, new Dictionary<string, object> { { "items", list }, { "error", ex.Message } }); return; }
+                SendJson(ctx, new Dictionary<string, object> { { "items", list } });
+            }
             else if (path == "/api/vsubs")
             {
                 // legendas externas ao lado do vídeo (mesmo nome, ex.: Filme.pt-BR.srt)
@@ -238,9 +303,10 @@ static partial class Central
                 // miniatura do vídeo (um quadro a 20% do filme), gerada pelo mpv e guardada no cache
                 var c = Consoles(cfg).FirstOrDefault(x => S(x, "id") == req.QueryString["c"]);
                 string vf = c == null ? "" : Full(root, req.QueryString["p"] ?? ""), exe = WebHost.MpvExe();
-                if (c == null || exe == null || !File.Exists(vf) || !AllDirs(c).Any(rd => vf.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                if (c == null || !File.Exists(vf) || !AllDirs(c).Any(rd => vf.StartsWith(Full(root, rd).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))) { Send(ctx, 404, "text/plain", new byte[0]); return; }
                 string td = Path.Combine(CacheDir, "vthumb"), f = Path.Combine(td, Hash(vf + "|" + new FileInfo(vf).Length) + ".jpg");
-                if (!File.Exists(f))
+                if (!File.Exists(f)) { Directory.CreateDirectory(td); ShellThumb(vf, f); }   // a mesma miniatura do Explorador do Windows
+                if (!File.Exists(f) && exe != null)
                 {
                     Directory.CreateDirectory(td); string tmp = Path.Combine(Path.GetTempPath(), "koru-th-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(tmp);
                     try
@@ -330,6 +396,8 @@ static partial class Central
                             wc.Headers[HttpRequestHeader.Accept] = "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5";
                             wc.Headers[HttpRequestHeader.AcceptLanguage] = "pt-BR,pt;q=0.9,en;q=0.8";
                             if (u.Contains("wikia.nocookie.net")) wc.Headers[HttpRequestHeader.Referer] = "https://www.fandom.com/";
+                            if (u.Contains("theposterdb.com")) wc.Headers[HttpRequestHeader.Referer] = "https://theposterdb.com/";
+                            if (u.Contains("movieposterdb.com")) wc.Headers[HttpRequestHeader.Referer] = "https://www.movieposterdb.com/";
                             data = wc.DownloadData(u);
                         }
                         object en; bool on = !(cfg.TryGetValue("coverCache", out en) && en is bool && !(bool)en);

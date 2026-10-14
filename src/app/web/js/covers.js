@@ -8,7 +8,7 @@ function openCover(isBg) {
   coverGame = g; modalOpen = true; cardMode = isBg === 'card'; logoMode = isBg === 'logo'; bgMode = !!isBg && !cardMode && !logoMode;
   $('ctitle').textContent = logoMode ? '🏷 Imagem do título (lombada)' : cardMode ? '🖼 Imagem do card' : bgMode ? '🌄 Escolher imagem de fundo' : '🖼 Escolher capa';
   $('creset').textContent = logoMode ? 'Voltar para o título automático' : cardMode ? 'Voltar para a imagem automática' : bgMode ? 'Voltar para o fundo automático' : 'Voltar para a capa automática';
-  $('cgame').textContent = g.name; $('cq').value = covers['name|' + coverKey(g)] || cleanTitle(g.name);   // nome dado pelo usuário tem prioridade na busca $('curl').value = '';
+  $('cgame').textContent = g.name; $('cq').value = covers['name|' + coverKey(g)] || ((sysOf(g) || {}).type === 'video' && typeof movieQuery === 'function' ? movieQuery(g).q : cleanTitle(g.name));   // nome dado pelo usuário tem prioridade na busca $('curl').value = '';
   if (cardMode) { const el = $('fgTrack') && $('fgTrack').querySelector(`.fgcard[data-i="${fg.sel}"]`), r = el && el.getBoundingClientRect(); cardKind = sgdbOn && r && r.width > r.height * 16 / 9 ? 'bg' : 'cover'; }   // fundos só com SteamGridDB e card mais largo que 16:9
   ckindPaint();
   $('coverModal').classList.add('on'); $('coverModal').classList.toggle('logo', logoMode); $('coverModal').classList.toggle('bgs', bgMode || (cardMode && cardKind === 'bg')); $('cq').focus(); $('cq').select();
@@ -83,12 +83,17 @@ async function searchCovers(more) {
   const tasks = [];
   const src = (p, map) => tasks.push(safe(p).then(r => flush(map(r || []))).catch(() => {}));
   // SteamGridDB (cada jogo dele em paralelo)
-  if (sgdbOn) src((async () => {
+  if (sgdbOn && !(s && s.type === 'video')) src((async () => {
     const games = (await sg('/api/v2/search/autocomplete/' + encodeURIComponent(q))).map(x => ({ x, ...relevance(q, x.name) })).sort((a, b) => (b.phrase - a.phrase) || (b.overlap - a.overlap)).slice(0, 3 * L);
     const lists = await Promise.all(games.map(gm => (logoMode ? sg(`/api/v2/logos/game/${gm.x.id}?${STATIC}`) : bgLike ? sg(`/api/v2/heroes/game/${gm.x.id}?${STATIC}`) : sgdbGrids(gm.x.id)).catch(() => [])));
     return games.flatMap((gm, k) => lists[k].map(x => ({ url: x.url, label: gm.x.name, src: 'SteamGridDB · ★' + (x.score || 0), phrase: gm.phrase, overlap: gm.overlap })));
   })(), l => l);
   const libNames = () => { const ix = s.thumbs && thumbIndex[s.thumbs]; if (!ix || !ix.names) return []; const ws = q.toLowerCase().split(/\s+/).filter(Boolean); return ix.names.filter(n => ws.every(w => n.toLowerCase().includes(w))).slice(0, N); };
+  if (s && s.type === 'video' && !logoMode) {   // vídeos: só pôsteres de filmes/séries (ThePosterDB e MoviePosterDB)
+    const pz = k => api(`/api/posters?src=${k}&q=${encodeURIComponent(q)}`).then(r => (r && r.items) || []);
+    src(pz('tpdb'), l => l.map(x => mk(x.url, x.label || q, 'ThePosterDB')));
+    src(pz('mpdb'), l => l.map(x => mk(x.url, x.label || q, 'MoviePosterDB')));
+  } else
   if (logoMode) {   // títulos: logos da Steam e da libretro (Named_Logos)
     src(steamSearch(q), l => l.slice(0, N).map(it => ({ url: `${STEAM}${it.id}/logo.png`, label: it.name, src: 'Steam', ...relevance(q, it.name) })));
     src(loadThumbIndex(s).then(libNames), l => l.map(n => ({ url: `${THUMBS}${s.thumbs}/master/Named_Logos/${encodeURIComponent(n)}`, label: n.replace(/\.png$/i, ''), src: 'libretro', ...relevance(q, n) })));

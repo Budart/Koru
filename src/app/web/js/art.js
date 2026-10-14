@@ -209,7 +209,7 @@ async function moviePoster(g) {
 async function resolveArt0(g) {
   const key = coverKey(g);
   if (covers[key]) return { box: covers[key], snap: null, src: 'manual' };
-  { const sv = (typeof sysOf === 'function' && sysOf(g)) || {}; if (sv.type === 'video') { const u = `/api/vthumb?c=${encodeURIComponent(g.sid || sv.id)}&p=${encodeURIComponent(g.path)}`; const po = await moviePoster(g).catch(() => null); return { box: po || u, snap: u, src: po ? 'poster' : 'video', v: 3 }; } }   // vídeo: pôster do filme/série (iTunes, Wikipedia) e um quadro do próprio vídeo no fundo
+  { const sv = (typeof sysOf === 'function' && sysOf(g)) || {}; if (sv.type === 'video') { const u = `/api/vthumb?c=${encodeURIComponent(g.sid || sv.id)}&p=${encodeURIComponent(g.path)}`; return { box: u, snap: u, src: 'video', v: 3 }; } }   // vídeo: só a miniatura do próprio arquivo (a do Explorador do Windows); pôster só se escolhido à mão
   if (artCache[key] && artCache[key].box) return artCache[key];
   const q = cleanTitle(dn(g)) || dn(g), S = (typeof sysOf === 'function' && sysOf(g)) || {}, pc = S.type === 'pc', t0 = Date.now();
   const sgP = sgdbOn ? sgdbArt(g).catch(() => null) : Promise.resolve(null);
