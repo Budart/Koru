@@ -273,20 +273,41 @@ static partial class Central
                     foreach (var f in Directory.GetFiles(Path.GetDirectoryName(vf)))
                     {
                         string e = Path.GetExtension(f).ToLowerInvariant(), n = Path.GetFileNameWithoutExtension(f);
-                        if ((e == ".srt" || e == ".vtt") && n.StartsWith(bn, StringComparison.OrdinalIgnoreCase))
+                        if ((e == ".srt" || e == ".vtt" || e == ".ass" || e == ".ssa") && n.StartsWith(bn, StringComparison.OrdinalIgnoreCase))
                         { string lab = n.Substring(bn.Length).Trim('.', ' ', '_', '-'); list.Add(new Dictionary<string, object> { { "name", lab == "" ? "Legenda" : lab }, { "file", Path.GetFileName(f) } }); }
                     }
                 }
+                if (vf != null) list.AddRange(EmbeddedSubs(vf));   // legendas dentro do próprio arquivo (MKV)
                 SendJson(ctx, list);
+            }
+            else if (path == "/api/vsubpick" && req.HttpMethod == "POST")
+            {
+                string bodyText; using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) bodyText = sr.ReadToEnd();
+                var body = (Dictionary<string, object>)Json.DeserializeObject(bodyText);
+                string vf = WebHost.VideoFileOf(S(body, "c"), S(body, "p"));
+                string f = PickSubFile(vf != null ? Path.GetDirectoryName(vf) : null);
+                SendJson(ctx, f == null ? new Dictionary<string, object> { { "ok", false } } : new Dictionary<string, object> { { "ok", true }, { "path", f }, { "name", Path.GetFileNameWithoutExtension(f) } });
+            }
+            else if (path == "/api/vsubfile")
+            {
+                string f = req.QueryString["f"] ?? "";
+                if (!Regex.IsMatch(Path.GetExtension(f), @"^\.(srt|vtt|ass|ssa)$", RegexOptions.IgnoreCase) || !File.Exists(f)) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(SubFileToVtt(f)));
             }
             else if (path == "/api/vsub")
             {
                 string vf = WebHost.VideoFileOf(req.QueryString["c"], req.QueryString["p"]), fn = Path.GetFileName(req.QueryString["f"] ?? "");
+                int emb; if (vf != null && int.TryParse(req.QueryString["emb"] ?? "", out emb))
+                {   // legenda embutida: extrai uma vez e guarda no cache
+                    string cd = Path.Combine(CacheDir, "subs"), cf = Path.Combine(cd, Hash(vf + "|" + new FileInfo(vf).Length + "|" + emb) + ".vtt");
+                    string vtt = File.Exists(cf) ? File.ReadAllText(cf, Encoding.UTF8) : null;
+                    if (vtt == null) { vtt = MkvSubToVtt(vf, emb); if (vtt != null) { Directory.CreateDirectory(cd); File.WriteAllText(cf, vtt, Utf8); } }
+                    if (vtt == null) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                    Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(vtt)); return;
+                }
                 string sf = vf == null || fn == "" ? null : Path.Combine(Path.GetDirectoryName(vf), fn);
                 if (sf == null || !File.Exists(sf)) { Send(ctx, 404, "text/plain", new byte[0]); return; }
-                var raw = File.ReadAllBytes(sf); string txt;
-                try { txt = new UTF8Encoding(false, true).GetString(raw); } catch { txt = Encoding.GetEncoding(1252).GetString(raw); }   // legendas antigas costumam vir em ANSI
-                Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(SrtToVtt(txt)));
+                Send(ctx, 200, "text/vtt; charset=utf-8", Utf8.GetBytes(SubFileToVtt(sf)));
             }
             else if (path == "/api/vplayer" && req.HttpMethod == "POST")
             {

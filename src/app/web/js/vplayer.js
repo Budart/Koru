@@ -72,8 +72,15 @@ async function openVPlayer(g) {
   clearInterval(VP.saveT); VP.saveT = setInterval(() => { if (VP.open && v.currentTime > 5) try { localStorage.setItem('vpos|' + coverKey(g), v.currentTime); } catch (e) {} }, 4000);
   // legendas externas (.srt / .vtt com o mesmo nome do vídeo)
   try { VP.subs = await api(vpUrl(g, 'vsubs')); } catch (e) { VP.subs = []; }
-  VP.subs.forEach((x, i) => { const t = document.createElement('track'); t.kind = 'subtitles'; t.label = x.name; t.src = vpUrl(g, 'vsub', '&f=' + encodeURIComponent(x.file)); v.appendChild(t); });
-  if (VP.subs.length && s.subOn !== false) { const pref = (s.subLang || 'pt').split(',').map(x => x.trim().toLowerCase()); let k = VP.subs.findIndex(x => pref.some(p => x.name.toLowerCase().includes(p))); vpSetSub(k < 0 ? 0 : k); } else vpSetSub(-1);
+  if (!VP.open || VP.g !== g) return;
+  VP.subs = VP.subs.filter(x => x.text !== false || x.emb == null).concat(VP.subs.filter(x => x.text === false));   // legendas de imagem (PGS) no fim: não dá para mostrar
+  VP.subs.forEach(x => vpAddTrack(g, x));
+  const usable = VP.subs.map((x, i) => i).filter(i => VP.subs[i].text !== false);
+  if (usable.length && s.subOn !== false) {
+    const pref = (s.subLang || 'pt').split(',').map(x => x.trim().toLowerCase()).filter(Boolean), nm = i => (VP.subs[i].name + ' ' + (VP.subs[i].lang || '')).toLowerCase();
+    let k = -1; for (const p of pref) { k = usable.find(i => nm(i).split(/[\s()—,.-]+/).includes(p) || nm(i).includes(p === 'pt' || p === 'por' || p === 'pob' ? 'portugu' : p === 'en' || p === 'eng' ? 'ingl' : '\u0000')); if (k != null && k >= 0) break; k = -1; }
+    const d = usable.find(i => VP.subs[i].def); vpSetSub(k >= 0 ? k : d != null ? d : usable[0]);
+  } else vpSetSub(-1);
   vpSubMenu();
 }
 function vpFail() {
@@ -108,8 +115,22 @@ function vpLayout() {
   const [a, b] = k.split(':').map(Number), r = a / b, w = Math.min(W, H * r);
   Object.assign(box.style, { width: w + 'px', height: (w / r) + 'px' });
 }
+function vpAddTrack(g, x) {
+  const t = document.createElement('track'); t.kind = 'subtitles'; t.label = x.name;
+  t.src = x.path ? '/api/vsubfile?f=' + encodeURIComponent(x.path) : x.emb != null ? vpUrl(g, 'vsub', '&emb=' + x.emb) : vpUrl(g, 'vsub', '&f=' + encodeURIComponent(x.file));
+  t.addEventListener('load', () => { if (VP.subs[VP.sub] === x) { vpCues(); if (x.emb != null) vpOsd('Legenda: ' + x.name); } });
+  t.addEventListener('error', () => { if (VP.subs[VP.sub] === x) vpOsd('Não foi possível ler esta legenda'); });
+  $('vpV').appendChild(t);
+}
+async function vpPickSub() {
+  const g = VP.g; let r; try { r = await api('/api/vsubpick', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ c: g.sid || (sysOf(g) || {}).id, p: g.path }) }); } catch (e) { toast(e.message, true); return; }
+  if (!r || !r.ok || VP.g !== g) return;
+  const x = { name: r.name, path: r.path }; VP.subs.push(x); vpAddTrack(g, x); vpSetSub(VP.subs.length - 1); vpOsd('Legenda: ' + r.name);
+}
 function vpSetSub(k) {
   const tr = [...$('vpV').textTracks]; VP.sub = k;
+  if (k >= 0 && VP.subs[k] && VP.subs[k].text === false) { vpOsd('Legenda em imagem (PGS) — não suportada'); return; }
+  if (k >= 0 && VP.subs[k] && VP.subs[k].emb != null && !VP.subs[k]._ld) { VP.subs[k]._ld = 1; vpOsd('Carregando legenda do arquivo…'); }
   tr.forEach((t, i) => { t.mode = i === k ? 'hidden' : 'disabled'; t.oncuechange = i === k ? vpCues : null; });   // legenda desenhada pelo Koru
   vpCues();
   vpSubMenu();
@@ -122,8 +143,9 @@ function vpCues() {
 }
 function vpSubMenu() {
   const m = $('vpSubs'); if (!m) return;
-  m.innerHTML = `<div class="vpmi${VP.sub < 0 ? ' on' : ''}" data-k="-1">Desligadas</div>` + (VP.subs.length ? VP.subs.map((x, i) => `<div class="vpmi${VP.sub === i ? ' on' : ''}" data-k="${i}">${esc(x.name)}</div>`).join('') : '<div class="vpmi dim">Nenhuma legenda .srt/.vtt ao lado do vídeo</div>');
-  m.querySelectorAll('[data-k]').forEach(x => x.onclick = e => { e.stopPropagation(); vpSetSub(+x.dataset.k); m.classList.remove('on'); });
+  const tag = x => x.path ? ' <small>arquivo escolhido</small>' : x.emb != null ? (x.text === false ? ' <small>no vídeo · imagem, não suportada</small>' : ' <small>no vídeo</small>') : ' <small>' + esc(x.file.split('.').pop()) + '</small>';
+  m.innerHTML = `<div class="vpmi${VP.sub < 0 ? ' on' : ''}" data-k="-1">Desligadas</div>` + VP.subs.map((x, i) => `<div class="vpmi${VP.sub === i ? ' on' : ''}${x.text === false ? ' dim' : ''}" data-k="${i}">${esc(x.name)}${tag(x)}</div>`).join('') + `<div class="vpmi pick" data-k="pick">📂 Escolher arquivo de legenda…</div>`;
+  m.querySelectorAll('[data-k]').forEach(x => x.onclick = e => { e.stopPropagation(); m.classList.remove('on'); if (x.dataset.k === 'pick') vpPickSub(); else vpSetSub(+x.dataset.k); });
 }
 function vpSubStyle(s) {
   let st = $('vpCue'); if (!st) { st = document.createElement('style'); st.id = 'vpCue'; document.head.appendChild(st); }
@@ -136,7 +158,7 @@ async function vpAct(a) {
   else if (a === 'back') vpSeek(-10); else if (a === 'fwd') vpSeek(10);
   else if (a === 'mute') { v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = .5; }
   else if (a === 'sub') $('vpSubs').classList.toggle('on');
-  else if (a === 'subnext') { const n = VP.subs.length; if (!n) { vpOsd('Sem legendas'); return; } const k = VP.sub + 1 >= n ? -1 : VP.sub + 1; vpSetSub(k); vpOsd(k < 0 ? 'Legendas desligadas' : 'Legenda: ' + VP.subs[k].name); }
+  else if (a === 'subnext') { const n = VP.subs.length; if (!n) { vpOsd('Sem legendas'); return; } let k = VP.sub + 1; while (k < n && VP.subs[k].text === false) k++; if (k >= n) k = -1; vpSetSub(k); vpOsd(k < 0 ? 'Legendas desligadas' : 'Legenda: ' + VP.subs[k].name); }
   else if (a === 'asp') vpAspect(1);
   else if (a === 'bri') vpBri(1);
   else if (a === 'full') { document.body.classList.toggle('vpfull'); if (host) host.postMessage('fs'); setTimeout(vpLayout, 300); }
