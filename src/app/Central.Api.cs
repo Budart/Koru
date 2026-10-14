@@ -222,6 +222,20 @@ static partial class Central
             }
             else if (path == "/api/fsarg")
                 SendJson(ctx, new Dictionary<string, object> { { "arg", FullscreenArg(Full(root, req.QueryString["emu"] ?? "")) } });
+            else if (path == "/api/ffmpeg")
+            {
+                if (req.HttpMethod == "POST") WebHost.FfInstall();
+                SendJson(ctx, new Dictionary<string, object> { { "installed", WebHost.FfExe() != null }, { "busy", WebHost.FfBusy }, { "progress", WebHost.FfProgress }, { "step", WebHost.FfStep }, { "error", WebHost.FfError } });
+            }
+            else if (path == "/api/vaseg")
+            {
+                // áudio convertido em pedaços (Dolby/DTS → AAC) para o player tocar
+                string vf = WebHost.VideoFileOf(req.QueryString["c"], req.QueryString["p"]); int k; double t, d; var inv = System.Globalization.CultureInfo.InvariantCulture;
+                if (vf == null || !int.TryParse(req.QueryString["k"], out k) || !double.TryParse(req.QueryString["t"], System.Globalization.NumberStyles.Float, inv, out t) || !double.TryParse(req.QueryString["d"] ?? "30", System.Globalization.NumberStyles.Float, inv, out d)) { Send(ctx, 400, "text/plain", new byte[0]); return; }
+                var b = WebHost.AudioSegment(vf, k, Math.Max(0, t), Math.Max(1, Math.Min(120, d)));
+                if (b == null) { Send(ctx, 404, "text/plain", new byte[0]); return; }
+                Send(ctx, 200, "audio/aac", b);
+            }
             else if (path == "/api/mpv")
             {
                 if (req.HttpMethod == "POST") WebHost.MpvInstall();
