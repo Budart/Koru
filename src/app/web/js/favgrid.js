@@ -358,7 +358,7 @@ function renderFavGrid() {
 // imagem do card: escolhida pelo usuário > (card largo) tela/fundo do jogo > capa
 async function fgArt(i, el) {
   const g = fg.items[i], pl = fg.place[i], custom = covers['fcard|' + coverKey(g)] || covers[coverKey(g)];   // fundo escolhido só para o card (fcard|) > capa compartilhada com os consoles
-  let url = custom;
+  let url = custom || ((sysOf(g) || {}).type === 'video' ? vpUrl(g, 'vthumb') : '');   // vídeo: a miniatura do Explorador do Windows
   if (!url) { const a = cachedArt(g) || await resolveArt(g).catch(() => null); if (a) { const r = el.getBoundingClientRect(), ar = r.height > 0 ? r.width / r.height : pl.w / pl.h; url = (sgdbOn && ar > 16 / 9 && a.snap) ? a.snap : a.box; } }   // fundo só com SteamGridDB e card mais largo que 16:9; senão, capa
   const im = el.querySelector('.fgimg');
   if (url) { im.style.backgroundImage = `url("${cp(url).replace(/"/g, '%22')}")`; el.classList.add('has'); el._url = url; fgApplyOfs(el, g); }
@@ -633,7 +633,8 @@ async function fgGameBg(g, force) {
   const tok = ++fgBgTok;
   if (!favBgGame || !g) { host._g = null; host.querySelectorAll('.bgl').forEach(o => { o.classList.remove('on'); setTimeout(() => o.remove(), 600); }); return; }
   const over = covers['bg|' + coverKey(g)];
-  let url = over; if (!url) { const a = cachedArt(g) || await resolveArt(g).catch(() => null); url = a && a.snap; if (!url) url = await findBg(g).catch(() => null); if (!url && a) url = a.box; }   // sem fundo da capa: busca um fundo de verdade antes de usar a própria capa
+  let url = over; if (!url && (sysOf(g) || {}).type === 'video') url = await videoFirstFrame(g) || vpUrl(g, 'vthumb');   // vídeo: o primeiro quadro
+  if (!url) { const a = cachedArt(g) || await resolveArt(g).catch(() => null); url = a && a.snap; if (!url) url = await findBg(g).catch(() => null); if (!url && a) url = a.box; }   // sem fundo da capa: busca um fundo de verdade antes de usar a própria capa
   if (tok !== fgBgTok || !url) return;
   const old = [...host.querySelectorAll('.bgl')];
   const l = document.createElement('div'); l.className = 'bgl'; l.style.backgroundImage = `url("${cpb(url).replace(/"/g, '%22')}")`;

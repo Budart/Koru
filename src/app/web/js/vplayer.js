@@ -223,3 +223,20 @@ function vpFlash(k) {
   let f = $('vpFlash'); if (!f) { f = document.createElement('div'); f.id = 'vpFlash'; $('vplayer').querySelector('.vpframe').appendChild(f); }
   f.innerHTML = VP_ICO[k]; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
 }
+
+// primeiro quadro do vídeo (fundo dos Favoritos): lido pelo próprio player da página e guardado nesta sessão
+const vFrames = new Map();
+function videoFirstFrame(g) {
+  const k = coverKey(g); if (vFrames.has(k)) return vFrames.get(k);
+  const pr = new Promise(ok => {
+    const v = document.createElement('video'); let done = false;
+    const end = u => { if (done) return; done = true; clearTimeout(t); try { v.removeAttribute('src'); v.load(); } catch (e) {} ok(u); };
+    const t = setTimeout(() => end(null), 8000);
+    v.muted = true; v.preload = 'auto'; v.playsInline = true;
+    v.onloadeddata = () => { try { const w = Math.min(1920, v.videoWidth), h = Math.round(w * v.videoHeight / v.videoWidth); if (!w || !h) return end(null);
+      const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(v, 0, 0, w, h); end(c.toDataURL('image/jpeg', .86)); } catch (e) { end(null); } };
+    v.onerror = () => end(null);
+    v.src = vpUrl(g, 'vfile');
+  });
+  vFrames.set(k, pr); pr.then(u => { if (!u) vFrames.delete(k); }); return pr;
+}

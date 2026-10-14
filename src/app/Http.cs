@@ -18,7 +18,7 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Koru")]
 [assembly: AssemblyProduct("Koru")]
-[assembly: AssemblyVersion("1.6.12.0")]
+[assembly: AssemblyVersion("1.6.13.0")]
 
 // requisição da página (chega pelo WebView2, sem servidor HTTP/porta)
 class Req
