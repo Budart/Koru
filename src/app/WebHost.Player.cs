@@ -220,9 +220,6 @@ input-default-bindings=yes
     static Panel mpvHost; static Process mpvProc; static NamedPipeClientStream mpvPipe; static StreamWriter mpvOut; static bool mpvFull;
     public static bool PlayerOn { get { return mpvProc != null; } }
     [DllImport("user32.dll")] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
-    [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr h);
-    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
-    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
 
     static string Q(string s) { return "\"" + (s ?? "").Replace("\"", "") + "\""; }
     static string Opt(Dictionary<string, object> c, string k, string def) { object v; return c != null && c.TryGetValue(k, out v) && v != null && v.ToString() != "" ? v.ToString() : def; }

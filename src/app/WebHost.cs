@@ -253,10 +253,29 @@ static partial class WebHost
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     static void Post(string m) { try { form.BeginInvoke((Action)(() => { try { view.CoreWebView2.PostWebMessageAsString(m); } catch { } })); } catch { } }
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr SetActiveWindow(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder sb, int n);
+    static bool IsShellWindow(IntPtr h) { var sb = new System.Text.StringBuilder(64); GetClassName(h, sb, 64); var c = sb.ToString(); return c == "Shell_TrayWnd" || c == "Progman" || c == "WorkerW"; }
+    // traz a janela para a frente de verdade: "liga" a entrada do teclado à janela atual antes de trocar (o Windows bloqueia trocas de foco comuns)
     static void ForceForeground(IntPtr h)
     {
         if (h == IntPtr.Zero) return;
-        try { AllowSetForegroundWindow(-1); keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); if (IsIconic(h)) ShowWindow(h, 9); BringWindowToTop(h); SetForegroundWindow(h); } catch { }
+        try
+        {
+            AllowSetForegroundWindow(-1);
+            if (IsIconic(h)) ShowWindow(h, 9);
+            uint pid, tTarget = GetWindowThreadProcessId(h, out pid), tFg = GetWindowThreadProcessId(GetForegroundWindow(), out pid), me = GetCurrentThreadId();
+            keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+            if (tFg != 0 && tFg != me) AttachThreadInput(me, tFg, true);
+            if (tTarget != me) AttachThreadInput(me, tTarget, true);
+            BringWindowToTop(h); SetForegroundWindow(h); SetActiveWindow(h); SetFocus(h);
+            if (tTarget != me) AttachThreadInput(me, tTarget, false);
+            if (tFg != 0 && tFg != me) AttachThreadInput(me, tFg, false);
+        }
+        catch { }
     }
     // emulador: chamado logo após Process.Start
     public static void GameStarted(Process p)
@@ -268,11 +287,21 @@ static partial class WebHost
             var until = DateTime.Now.AddSeconds(20); bool focused = false;
             try
             {
-                while (!p.HasExited && DateTime.Now < until && !focused)
+                // espera a janela do emulador aparecer e garante o foco nela por alguns segundos
+                // (emuladores trocam de janela/tamanho ao carregar e o Koru não pode "roubar" o foco de volta)
+                DateTime hold = DateTime.MinValue;
+                while (!p.HasExited && DateTime.Now < until)
                 {
                     p.Refresh(); IntPtr h = p.MainWindowHandle;
-                    if (h != IntPtr.Zero && IsWindowVisible(h)) { ForceForeground(h); focused = true; }
-                    else Thread.Sleep(150);
+                    if (h != IntPtr.Zero && IsWindowVisible(h))
+                    {
+                        if (!focused) { focused = true; hold = DateTime.Now.AddSeconds(4); }
+                        IntPtr fg = GetForegroundWindow(); uint fpid; GetWindowThreadProcessId(fg, out fpid);
+                        bool ours = fg == IntPtr.Zero || fg == FormHandle || fpid == (uint)Process.GetCurrentProcess().Id;
+                        if (fg != h && (ours || fpid == (uint)p.Id || IsShellWindow(fg))) ForceForeground(h);
+                        if (DateTime.Now > hold) break;
+                    }
+                    Thread.Sleep(200);
                 }
                 p.WaitForExit();
             }
