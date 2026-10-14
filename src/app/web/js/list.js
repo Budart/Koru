@@ -325,7 +325,7 @@ let privOn = false;   // pasta privada de vídeos: só aparece quando revelada (
 function makeGroups(match, noFav) {
   const priv = privOn ? match.filter(g => g.priv).sort(sortCmp) : [];
   match = match.filter(g => !g.priv);
-  const sorter = (a, b) => (CATS.indexOf(ecat(a)) - CATS.indexOf(ecat(b))) || sortCmp(a, b);
+  const sorter = (a, b) => (CATS.indexOf(ecat(a)) - CATS.indexOf(ecat(b))) || String(ecat(a) || '').localeCompare(String(ecat(b) || '')) || sortCmp(a, b);   // mesma subcategoria sempre junta (uma só por nome)
   const favs = noFav ? [] : match.filter(g => !hidden.has(coverKey(g)) && isFavG(g)).sort(sortCmp);
   const vis = match.filter(g => !hidden.has(coverKey(g)) && (noFav || !isFavG(g))).sort(sorter);
   const hid = match.filter(g => hidden.has(coverKey(g))).sort(sortCmp);
