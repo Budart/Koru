@@ -167,7 +167,7 @@ while ($true) {
 
         List<Item> items = new List<Item>(); string status = ""; bool ghost, busy, paused; string lastHash;
         string src, dst; readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer { Interval = 700 }, topT = new System.Windows.Forms.Timer { Interval = 500 }, moveT = new System.Windows.Forms.Timer { Interval = 250 };
-        LangPanel panel; Form unghost;
+        LangPanel panel; Form unghost; bool menuOpen;
         Rectangle bIcon, bGhost, bMin, bMax, bClose; string hot = "";
 
         public Overlay()
@@ -188,7 +188,7 @@ while ($true) {
         protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Invalidate2(); }
         void Invalidate2() { if (items.Count > 0) items = new List<Item>(); Render(); moveT.Stop(); moveT.Start(); }
         protected override void OnFormClosed(FormClosedEventArgs e) { tick.Stop(); topT.Stop(); try { if (unghost != null) unghost.Close(); if (panel != null) panel.Close(); } catch { } base.OnFormClosed(e); }
-        void KeepTop() { if (WindowState == FormWindowState.Minimized) return; SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); if (unghost != null && unghost.Visible) SetWindowPos(unghost.Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x13); }
+        void KeepTop() { if (WindowState == FormWindowState.Minimized || menuOpen || (panel != null && !panel.IsDisposed && panel.Visible)) return; SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); if (unghost != null && unghost.Visible) SetWindowPos(unghost.Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x13); }
 
         // borda para redimensionar, botões, resto arrasta a janela
         protected override void WndProc(ref Message m)
@@ -216,7 +216,7 @@ while ($true) {
             else if (k == "max") { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; Render(); }
             else if (k == "ghost") SetGhost(true); else if (k == "icon") TogglePanel();
         }
-        void ShowMenu(Point at) { var m = new ContextMenuStrip(); m.Items.Add("Idiomas…", null, (s, e) => TogglePanel()); m.Items.Add("Modo fantasma", null, (s, e) => SetGhost(true)); m.Items.Add(new ToolStripSeparator()); m.Items.Add("Fechar", null, (s, e) => Close()); m.Show(at); }
+        void ShowMenu(Point at) { var m = new ContextMenuStrip { Renderer = new ToolStripProfessionalRenderer(new DarkColors()), ForeColor = Color.White, ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) }; menuOpen = true; m.Closed += (s, e) => { menuOpen = false; BeginInvoke((Action)(() => m.Dispose())); }; m.Items.Add("Idiomas…", null, (s, e) => TogglePanel()); m.Items.Add("Modo fantasma", null, (s, e) => SetGhost(true)); m.Items.Add(new ToolStripSeparator()); m.Items.Add("Fechar", null, (s, e) => Close()); m.Show(at); }
 
         void TogglePanel()
         {
@@ -228,7 +228,7 @@ while ($true) {
         {
             if (src != null && dst != null) SaveCfg(src, dst);
             items = new List<Item>(); status = ""; lastHash = null; paused = false;
-            if (src != null && dst != null) { if (panel != null) panel.Hide(); tick.Start(); Force(); } else tick.Stop();
+            if (src != null && dst != null) { tick.Start(); Force(); } else tick.Stop();
             Render();
         }
         void SetGhost(bool on)
@@ -239,9 +239,7 @@ while ($true) {
             {
                 if (unghost == null || unghost.IsDisposed)
                 {
-                    unghost = new Form { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, TopMost = true, StartPosition = FormStartPosition.Manual, BackColor = Color.FromArgb(47, 107, 255), Size = new Size(150, 30) };
-                    var b = new Button { Text = "👻  Voltar a clicar", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, Font = new Font("Segoe UI Semibold", 9f), Cursor = Cursors.Hand };
-                    b.FlatAppearance.BorderSize = 0; b.Click += (s, e) => SetGhost(false); unghost.Controls.Add(b);
+                    unghost = new GhostBack(); unghost.Click += (s, e) => SetGhost(false);
                 }
                 var g = Bounds; unghost.Location = new Point(g.Right - unghost.Width - 164, g.Top > 40 ? g.Top - unghost.Height - 2 : g.Top + 4);
                 unghost.Show(); try { SetWindowDisplayAffinity(unghost.Handle, 0x11); } catch { }
@@ -353,7 +351,7 @@ while ($true) {
                     {
                         int w = Width, off = w > 420 ? 160 : Math.Max(0, w - 260);
                         bClose = new Rectangle(w - off - 32, 6, 26, 22); bMax = new Rectangle(w - off - 60, 6, 26, 22); bMin = new Rectangle(w - off - 88, 6, 26, 22); bGhost = new Rectangle(w - off - 124, 6, 26, 22); bIcon = new Rectangle(6, 6, 30, 22);
-                        Btn(g, bIcon, "文A", hot == "icon", Color.FromArgb(70, 0, 0, 0)); Btn(g, bGhost, "👻", hot == "ghost", Color.FromArgb(210, 90, 70, 200));
+                        Btn(g, bIcon, "文A", hot == "icon", Color.FromArgb(70, 0, 0, 0)); Btn(g, bGhost, "", hot == "ghost", Color.FromArgb(210, 90, 70, 200)); GhostIcon(g, bGhost, hot == "ghost" ? Color.Black : Color.White);
                         Btn(g, bMin, "—", hot == "min", Color.FromArgb(70, 0, 0, 0)); Btn(g, bMax, WindowState == FormWindowState.Maximized ? "❐" : "□", hot == "max", Color.FromArgb(70, 0, 0, 0));
                         Btn(g, bClose, "✕", hot == "close", hot == "close" ? Color.FromArgb(232, 17, 35) : Color.FromArgb(70, 0, 0, 0));
                     }
@@ -368,6 +366,26 @@ while ($true) {
             using (var b = new SolidBrush(hot && bg.A < 200 ? Color.FromArgb(200, 255, 255, 255) : bg)) using (var p = Round(r, 5)) g.FillPath(b, p);
             using (var f = new Font("Segoe UI", 9.5f, FontStyle.Bold)) using (var b = new SolidBrush(hot && bg.A < 200 ? Color.Black : Color.White))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center }) g.DrawString(t, f, b, r, sf);
+        }
+        // fantasminha desenhado (emoji não aparece no desenho da janela)
+        internal static void GhostIcon(Graphics g, Rectangle r, Color c)
+        {
+            float h = r.Height * .72f, w = h * .8f, x = r.X + (r.Width - w) / 2f, y = r.Y + (r.Height - h) / 2f;
+            var sm = g.SmoothingMode; g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var p = new GraphicsPath())
+            {
+                p.AddArc(x, y, w, w, 180, 180);
+                float b = y + h, step = w / 3f;
+                p.AddLine(x + w, y + w / 2f, x + w, b);
+                p.AddLine(x + w, b, x + w - step / 2f, b - h * .14f); p.AddLine(x + w - step / 2f, b - h * .14f, x + w - step, b);
+                p.AddLine(x + w - step, b, x + w - step * 1.5f, b - h * .14f); p.AddLine(x + w - step * 1.5f, b - h * .14f, x + w - step * 2f, b);
+                p.AddLine(x + w - step * 2f, b, x + step / 2f, b - h * .14f); p.AddLine(x + step / 2f, b - h * .14f, x, b);
+                p.CloseFigure();
+                using (var br = new SolidBrush(c)) g.FillPath(br, p);
+            }
+            Color eye = c.GetBrightness() > .5f ? Color.FromArgb(90, 70, 200) : Color.White; float e = w * .2f;
+            using (var br = new SolidBrush(eye)) { g.FillEllipse(br, x + w * .24f, y + w * .38f, e, e * 1.25f); g.FillEllipse(br, x + w * .56f, y + w * .38f, e, e * 1.25f); }
+            g.SmoothingMode = sm;
         }
         static void FitText(Graphics g, string text, Rectangle r, Color fg)
         {
@@ -389,27 +407,133 @@ while ($true) {
         }
     }
 
+    // cores do menu do botão direito
+    class DarkColors : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground { get { return Color.FromArgb(32, 32, 38); } }
+        public override Color MenuBorder { get { return Color.FromArgb(61, 123, 255); } }
+        public override Color MenuItemBorder { get { return Color.FromArgb(61, 123, 255); } }
+        public override Color MenuItemSelected { get { return Color.FromArgb(47, 107, 255); } }
+        public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(47, 107, 255); } }
+        public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(47, 107, 255); } }
+        public override Color SeparatorDark { get { return Color.FromArgb(60, 60, 70); } }
+        public override Color SeparatorLight { get { return Color.FromArgb(32, 32, 38); } }
+    }
+
+    // botão plano arredondado (desenhado à mão, sem o visual cinza do Windows)
+    class FlatBtn : Control
+    {
+        public Color Accent = Color.FromArgb(47, 107, 255); bool over, down;
+        public FlatBtn() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.Selectable, true); Cursor = Cursors.Hand; ForeColor = Color.White; Font = new Font("Segoe UI Semibold", 9.5f); TabStop = true; }
+        protected override void OnMouseEnter(EventArgs e) { over = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { over = down = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space) OnClick(EventArgs.Empty); base.OnKeyDown(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.Clear(Parent != null ? Parent.BackColor : BackColor);
+            var c = down ? ControlPaint.Dark(Accent, .1f) : over ? ControlPaint.Light(Accent, .25f) : Accent;
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var p = Rnd(r, 6)) { using (var b = new SolidBrush(c)) g.FillPath(b, p); if (Focused) using (var pen = new Pen(Color.White, 1.5f)) g.DrawPath(pen, p); }
+            TextRenderer.DrawText(g, Text, Font, r, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+        internal static GraphicsPath Rnd(Rectangle r, int rad) { var p = new GraphicsPath(); int d = rad * 2; p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p; }
+    }
+
+    // caixa de seleção escura (desenhada à mão: a do Windows fica branca/quebrada no modo plano)
+    class DarkCombo : ComboBox
+    {
+        public DarkCombo()
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList; DrawMode = DrawMode.OwnerDrawFixed; FlatStyle = FlatStyle.Flat;
+            BackColor = Color.FromArgb(44, 44, 52); ForeColor = Color.White; Font = new Font("Segoe UI", 10f); ItemHeight = 24; MaxDropDownItems = 12; IntegralHeight = false; DropDownHeight = 24 * 12 + 2;
+        }
+        protected override void OnDrawItem(DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+            bool edit = (e.State & DrawItemState.ComboBoxEdit) != 0, sel = (e.State & DrawItemState.Selected) != 0 && !edit;
+            var bg = sel ? Color.FromArgb(47, 107, 255) : BackColor;
+            using (var b = new SolidBrush(bg)) e.Graphics.FillRectangle(b, e.Bounds);
+            var fg = e.Index == 0 && !sel ? Color.FromArgb(150, 150, 160) : ForeColor;
+            var r = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, Items[e.Index].ToString(), Font, r, fg, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+        }
+        const int WM_PAINT = 0xF;
+        [DllImport("user32.dll")] static extern IntPtr GetWindowDC(IntPtr h); [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == WM_PAINT)
+            {   // borda e seta no mesmo tom (a borda branca do Windows some)
+                IntPtr dc = GetWindowDC(Handle);
+                try
+                {
+                    using (var g = Graphics.FromHdc(dc))
+                    {
+                        var r = new Rectangle(0, 0, Width - 1, Height - 1); int bw = 22;
+                        using (var b = new SolidBrush(BackColor)) g.FillRectangle(b, Width - bw - 1, 1, bw, Height - 2);
+                        using (var p = new Pen(Focused || DroppedDown ? Color.FromArgb(61, 123, 255) : Color.FromArgb(70, 70, 82))) g.DrawRectangle(p, r);
+                        g.SmoothingMode = SmoothingMode.AntiAlias; int cx = Width - bw / 2 - 2, cy = Height / 2;
+                        using (var b = new SolidBrush(Color.FromArgb(200, 200, 210))) g.FillPolygon(b, new[] { new Point(cx - 4, cy - 2), new Point(cx + 4, cy - 2), new Point(cx, cy + 3) });
+                    }
+                }
+                finally { ReleaseDC(Handle, dc); }
+            }
+        }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+    }
+
+    // botão "voltar a clicar" do modo fantasma
+    class GhostBack : Form
+    {
+        bool over;
+        public GhostBack()
+        {
+            FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true; StartPosition = FormStartPosition.Manual; Size = new Size(168, 32); Cursor = Cursors.Hand;
+            BackColor = Color.FromArgb(30, 30, 36); DoubleBuffered = true;
+            MouseEnter += (s, e) => { over = true; Invalidate(); }; MouseLeave += (s, e) => { over = false; Invalidate(); };
+        }
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+            var c = over ? Color.FromArgb(80, 140, 255) : Color.FromArgb(47, 107, 255);
+            using (var p = FlatBtn.Rnd(new Rectangle(0, 0, Width - 1, Height - 1), 7)) using (var b = new SolidBrush(c)) g.FillPath(b, p);
+            Overlay.GhostIcon(g, new Rectangle(8, 4, 24, Height - 8), Color.White);
+            using (var f = new Font("Segoe UI Semibold", 9.5f)) TextRenderer.DrawText(g, "Voltar a clicar", f, new Rectangle(34, 0, Width - 40, Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+        }
+    }
+
     // painel dos idiomas (abre pelo 文A)
     class LangPanel : Form
     {
         public event Action<string, string> Changed;
-        readonly ComboBox s = new ComboBox(), d = new ComboBox();
+        readonly DarkCombo s = new DarkCombo(), d = new DarkCombo();
         public LangPanel(string src, string dst)
         {
-            FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true; StartPosition = FormStartPosition.Manual; BackColor = Color.FromArgb(30, 30, 34); Size = new Size(230, 176); Padding = new Padding(12);
-            Func<string, int, Label> lab = (t, y) => new Label { Text = t, ForeColor = Color.FromArgb(220, 220, 220), Font = new Font("Segoe UI", 8.5f), Location = new Point(12, y), AutoSize = true };
-            foreach (var cb in new[] { s, d }) { cb.DropDownStyle = ComboBoxStyle.DropDownList; cb.FlatStyle = FlatStyle.Flat; cb.BackColor = Color.FromArgb(44, 44, 50); cb.ForeColor = Color.White; cb.Width = 206; cb.Font = new Font("Segoe UI", 9.5f); }
+            FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true; StartPosition = FormStartPosition.Manual; BackColor = Color.FromArgb(30, 30, 36); Size = new Size(252, 196); KeyPreview = true;
+            Func<string, int, Label> lab = (t, y) => new Label { Text = t, ForeColor = Color.FromArgb(200, 200, 210), Font = new Font("Segoe UI", 9f), Location = new Point(14, y), AutoSize = true, BackColor = Color.Transparent };
+            foreach (var cb in new[] { s, d }) { cb.Width = 224; }
             s.Items.Add("Selecione…"); foreach (var l in Langs) s.Items.Add(l[0]);
             d.Items.Add("Selecione…"); foreach (var l in Langs.Skip(1)) d.Items.Add(l[0]);
             s.SelectedIndex = src == null ? 0 : Math.Max(0, Array.FindIndex(Langs, x => x[1] == src) + 1);
             d.SelectedIndex = dst == null ? 0 : Math.Max(0, Array.FindIndex(Langs, x => x[1] == dst));
-            Controls.Add(lab("Idioma do texto", 10)); s.Location = new Point(12, 28); Controls.Add(s);
-            Controls.Add(lab("Traduzir para", 62)); d.Location = new Point(12, 80); Controls.Add(d);
-            var stop = new Button { Text = "Parar tradução", Location = new Point(12, 124), Size = new Size(206, 32), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(47, 107, 255), ForeColor = Color.White, Font = new Font("Segoe UI Semibold", 9f), Cursor = Cursors.Hand };
-            stop.FlatAppearance.BorderSize = 0; stop.Click += (o, e) => d.SelectedIndex = 0; Controls.Add(stop);
+            Controls.Add(lab("Idioma do texto", 12)); s.Location = new Point(14, 32); s.TabIndex = 0; Controls.Add(s);
+            Controls.Add(lab("Traduzir para", 70)); d.Location = new Point(14, 90); d.TabIndex = 1; Controls.Add(d);
+            var stop = new FlatBtn { Text = "Parar tradução", Location = new Point(14, 140), Size = new Size(108, 34), Accent = Color.FromArgb(70, 70, 82), TabIndex = 2 };
+            var ok = new FlatBtn { Text = "Pronto", Location = new Point(130, 140), Size = new Size(108, 34), TabIndex = 3 };
+            stop.Click += (o, e) => d.SelectedIndex = 0; ok.Click += (o, e) => Hide();
+            Controls.Add(stop); Controls.Add(ok);
             EventHandler ch = (o, e) => { string a = s.SelectedIndex > 0 ? Langs[s.SelectedIndex - 1][1] : null, b = d.SelectedIndex > 0 ? Langs[d.SelectedIndex][1] : null; if (Changed != null) Changed(a, b); };
-            s.SelectedIndexChanged += ch; d.SelectedIndexChanged += ch;
-            Deactivate += (o, e) => { if (!s.DroppedDown && !d.DroppedDown) Hide(); };
+            s.SelectionChangeCommitted += ch; d.SelectionChangeCommitted += ch; stop.Click += ch;
+            KeyDown += (o, e) => { if (e.KeyCode == Keys.Escape) { Hide(); e.Handled = true; } };
+            Deactivate += (o, e) => BeginInvoke((Action)(() => { if (Visible && !s.DroppedDown && !d.DroppedDown && !ContainsFocus) Hide(); }));
         }
+        protected override void OnPaint(PaintEventArgs e) { base.OnPaint(e); using (var p = new Pen(Color.FromArgb(61, 123, 255))) e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1); }
+        protected override void OnShown(EventArgs e) { base.OnShown(e); s.Focus(); }
     }
 }
