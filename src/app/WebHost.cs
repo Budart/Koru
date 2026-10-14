@@ -338,6 +338,7 @@ static partial class WebHost
 
     static void OnMessage(string msg)
     {
+        if (msg != null && msg.StartsWith("artres:")) { ToMini(msg); return; }
         switch (msg)
         {
             case "min": form.WindowState = FormWindowState.Minimized; break;

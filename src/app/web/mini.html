@@ -84,9 +84,14 @@ function preview(g) {
   const s = sysById[g.sid] || {}; $('ttl').textContent = nameOf(g); $('sub').textContent = s.name || '';
   let h = 0; for (const c of nameOf(g)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const gen = `<div class="gen" style="background:linear-gradient(155deg,hsl(${h % 360},55%,30%),hsl(${(h >> 8) % 360},45%,12%))">${esc(nameOf(g))}</div>`;
-  const u = coverUrl(g); $('cov').innerHTML = gen;
-  if (u) { const im = new Image(); im.onload = () => { if (tok === pvTok) { $('cov').innerHTML = ''; $('cov').appendChild(im); } }; im.src = u; }
+  $('cov').innerHTML = gen;
+  const show = u => { if (!u) return; const im = new Image(); im.onload = () => { if (tok === pvTok) { $('cov').innerHTML = ''; $('cov').appendChild(im); } }; im.src = /^https?:/.test(u) ? '/api/img?u=' + encodeURIComponent(u) : u; };
+  const k = key(g);
+  if (artGot[k] !== undefined) { show(artGot[k]); return; }
+  show(coverUrl(g)); artWait[k] = show; post('art:' + JSON.stringify({ sid: g.sid, path: g.path, name: g.name }));   // o Koru principal resolve a capa
 }
+const artGot = {}, artWait = {};
+if (host) host.addEventListener('message', e => { if (typeof e.data !== 'string' || !e.data.startsWith('artres:')) return; const o = JSON.parse(e.data.slice(7)), k = o.sid + '|' + o.path; artGot[k] = o.box || ''; const f = artWait[k]; delete artWait[k]; if (f && o.box) { const g = shown[sel]; if (g && key(g) === k) f(o.box); } });
 let busy = false;
 async function openSel() {
   const g = shown[sel]; if (!g || busy) return; const s = sysById[g.sid] || {};

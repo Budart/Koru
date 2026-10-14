@@ -54,6 +54,7 @@ static partial class WebHost
     {
         if (m == null) return;
         if (m == "hide") HideMini();
+        else if (m.StartsWith("art:")) { try { if (ready) view.CoreWebView2.PostWebMessageAsString(m); } catch { } }   // capa: o Koru principal (que já sabe buscar capas) responde
         else if (m == "open") { HideMini(); Show(null); }
         else if (m.StartsWith("play:"))   // vídeo: abre o Koru já no player
         {
@@ -61,4 +62,9 @@ static partial class WebHost
             try { if (ready) view.CoreWebView2.PostWebMessageAsString(m); } catch { }
         }
     }
+}
+
+static partial class WebHost
+{
+    public static void ToMini(string m) { try { if (miniReady && mini != null) mini.BeginInvoke((Action)(() => { try { miniView.CoreWebView2.PostWebMessageAsString(m); } catch { } })); } catch { } }
 }

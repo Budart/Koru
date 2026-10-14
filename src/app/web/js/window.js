@@ -16,6 +16,14 @@ function setGameOn(on) {
   gameOn = on;
   if (on) { try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
 }
+// mini busca da bandeja pede a capa: responde com a mesma capa usada aqui (resolve se ainda não tiver)
+if (host) host.addEventListener('message', e => { if (typeof e.data !== 'string' || !e.data.startsWith('art:')) return; try {
+  const o = JSON.parse(e.data.slice(4)), l = [].concat(typeof allGames !== 'undefined' && allGames || [], (typeof gameCache !== 'undefined' && gameCache[o.sid]) || []), g = l.find(x => (x.sid || o.sid) === o.sid && x.path === o.path) || o;
+  const k = o.sid + '|' + o.path, man = covers[k];
+  const send = box => host.postMessage('artres:' + JSON.stringify({ sid: o.sid, path: o.path, box: box || '' }));
+  if (man) return send(man);
+  resolveArt(g, true).then(a => send(a && a.box)).catch(() => send(''));
+} catch (er) {} });
 if (host) host.addEventListener('message', e => { if (typeof e.data === 'string' && e.data.startsWith('play:')) { try { const o = JSON.parse(e.data.slice(5)), l = [].concat(typeof allGames !== 'undefined' && allGames || [], typeof games !== 'undefined' && games || [], (typeof gameCache !== 'undefined' && gameCache[o.sid]) || []); openVPlayer(l.find(x => (x.sid || o.sid) === o.sid && x.path === o.path) || o); } catch (er) {} return; } if (e.data === 'game:on') setGameOn(true); else if (e.data === 'game:off') { setGameOn(false); setTimeout(refreshScreen, 250); } });
 // voltou do jogo: redesenha a tela atual para recarregar capas, cards e fundos
 function refreshScreen() {
